@@ -8,7 +8,7 @@ import argparse
 import pandas as pd
 
 from config import OUTPUT_DIR, MAX_DRUGS
-from validator import validate_disease_input
+from disease_validator import validate_disease_input
 from fetcher import fetch_all
 from ml import (
     compute_topological_indices,
