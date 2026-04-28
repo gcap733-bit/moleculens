@@ -429,7 +429,11 @@ function renderResults(data, jobId) {
       <div>${data.columns?.length ?? 0} properties per drug</div>
       <a class="download-btn" href="${API}/download/${jobId}" download>
         <svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>
-        Download full CSV
+        Download CSV
+      </a>
+      <a class="download-btn" href="${API}/download-excel/${jobId}" download style="margin-top:6px;border-color:#4ab4f0;color:#4ab4f0">
+        <svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>
+        Download Excel (7 sheets)
       </a>
     </div>`;
   sec.appendChild(hdr);
