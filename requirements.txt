@@ -1,0 +1,16 @@
+# ==========================================
+# requirements.txt
+# pip install -r requirements.txt
+# ==========================================
+rdkit
+chembl_webresource_client
+xgboost
+scikit-learn
+pandas
+numpy
+requests
+rapidfuzz
+shap
+fastapi
+uvicorn[standard]
+python-multipart

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MolecuLens — Drug QSPR Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c0f;--surface:#111418;--surface2:#181c22;
+  --border:#232830;--border2:#2e3540;--text:#e8eaed;--muted:#7a8494;
+  --accent:#4af0b0;--accent2:#1de9b6;--warn:#f0c44a;--danger:#f06060;
+  --mono:'DM Mono',monospace;--serif:'Fraunces',Georgia,serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:999;opacity:.4}
+body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:40px 40px;opacity:.3;pointer-events:none;z-index:0}
+.page{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:0 24px 80px}
+
+header{padding:48px 0 40px;border-bottom:1px solid var(--border)}
+.logo{font-family:var(--serif);font-size:38px;font-weight:300;letter-spacing:-1px;line-height:1}
+.logo em{font-style:italic;color:var(--accent)}
+.tagline{margin-top:10px;font-size:12px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+
+.backend-banner{display:none;margin-top:16px;padding:10px 14px;border-radius:4px;border-left:3px solid var(--danger);background:rgba(240,96,96,.06);font-size:12px;color:#f09090;line-height:1.7}
+.backend-banner.show{display:block}
+.backend-banner code{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;font-family:var(--mono)}
+
+.search-section{padding:48px 0 0}
+.search-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.search-row{display:flex;gap:10px;align-items:stretch}
+#disease-input{
+  flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:4px;
+  padding:14px 18px;font-family:var(--mono);font-size:16px;color:var(--text);
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+#disease-input::placeholder{color:var(--muted)}
+#disease-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,240,176,.08)}
+#disease-input:disabled{opacity:.45;cursor:not-allowed}
+#disease-input.error{border-color:var(--danger)}
+#disease-input.warn{border-color:var(--warn)}
+.run-btn{
+  background:var(--accent);color:#0a0c0f;border:none;border-radius:4px;
+  padding:14px 28px;font-family:var(--mono);font-size:14px;font-weight:500;
+  cursor:pointer;white-space:nowrap;letter-spacing:.04em;transition:background .15s,transform .1s;
+}
+.run-btn:hover{background:var(--accent2)}
+.run-btn:active{transform:scale(.97)}
+.run-btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;transform:none}
+.msg{margin-top:12px;font-size:12px;padding:10px 14px;border-radius:4px;border-left:3px solid;display:none}
+.msg.show{display:block}
+.msg.error{border-color:var(--danger);background:rgba(240,96,96,.06);color:#f09090}
+.msg.warn{border-color:var(--warn);background:rgba(240,196,74,.06);color:#f0d080}
+.msg.info{border-color:var(--accent);background:rgba(74,240,176,.06);color:var(--accent)}
+.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pill{background:var(--surface2);border:1px solid var(--border2);border-radius:3px;padding:5px 12px;font-size:12px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s;font-family:var(--mono)}
+.pill:hover{border-color:var(--accent);color:var(--accent)}
+
+#progress-section{display:none;padding-top:48px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.progress-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.progress-status{font-size:12px;color:var(--muted)}
+.progress-track{height:2px;background:var(--border2);border-radius:1px;overflow:hidden}
+.progress-bar{height:100%;background:var(--accent);border-radius:1px;width:40%;animation:slide 1.4s ease-in-out infinite}
+.progress-bar.done{animation:none;width:100%;transition:width .4s}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+.progress-steps{margin-top:20px;display:flex;flex-direction:column;gap:8px}
+.step{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);opacity:.35;transition:opacity .3s,color .3s}
+.step.active{opacity:1;color:var(--text)}
+.step.done{opacity:.7;color:var(--accent)}
+.step-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.step.active .step-dot{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+
+#results-section{display:none;padding-top:56px}
+.results-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:36px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.results-title{font-family:var(--serif);font-size:28px;font-weight:300;line-height:1.2}
+.results-title em{font-style:italic;color:var(--accent)}
+.results-meta{font-size:11px;color:var(--muted);text-align:right;line-height:1.9}
+.download-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--accent);border-radius:4px;color:var(--accent);padding:9px 18px;font-family:var(--mono);font-size:12px;cursor:pointer;text-decoration:none;transition:background .15s;margin-top:8px}
+.download-btn:hover{background:rgba(74,240,176,.08)}
+.download-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:40px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px 18px}
+.stat-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.stat-value{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text);line-height:1}
+.stat-value.accent{color:var(--accent)}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+.section-head{display:flex;align-items:center;gap:12px;margin:40px 0 16px}
+.section-head h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.section-line{flex:1;height:1px;background:var(--border)}
+
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:32px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);font-weight:400}
+td{padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:500}
+.badge.pass{background:rgba(74,240,176,.12);color:var(--accent)}
+.badge.fail{background:rgba(240,96,96,.12);color:var(--danger)}
+.r2-bar{display:flex;align-items:center;gap:8px}
+.r2-track{width:80px;height:4px;background:var(--border2);border-radius:2px;overflow:hidden;flex-shrink:0}
+.r2-fill{height:100%;background:var(--accent);border-radius:2px}
+
+.shap-prop-select{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:16px;outline:none;cursor:pointer}
+.shap-prop-select:focus{border-color:var(--accent)}
+.shap-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:32px}
+.shap-row{display:flex;align-items:center;gap:12px}
+.shap-feat{width:48px;font-size:11px;color:var(--muted);text-align:right;flex-shrink:0}
+.shap-track{flex:1;height:8px;background:var(--border2);border-radius:4px;overflow:hidden}
+.shap-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .5s ease}
+.shap-val{width:72px;font-size:11px;color:var(--muted)}
+
+.heatmap-wrap{overflow-x:auto;margin-bottom:32px}
+.heatmap-table{border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+.heatmap-table th{padding:8px 12px;color:var(--muted);font-weight:400;font-size:10px;letter-spacing:.08em;text-align:center}
+.heatmap-table td{padding:8px 12px;border-radius:3px;font-size:12px;text-align:center}
+.row-label{text-align:left !important;color:var(--muted);padding-right:16px !important}
+
+.drug-table-note{font-size:11px;color:var(--muted);margin-bottom:10px}
+.new-search-btn{margin-top:32px;background:transparent;border:1px solid var(--border2);border-radius:4px;padding:10px 20px;font-family:var(--mono);font-size:12px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
+.new-search-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+.fade-in{animation:fadeIn .5s ease forwards}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:600px){
+  .search-row{flex-direction:column}
+  .results-header{flex-direction:column;align-items:flex-start;gap:12px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .logo{font-size:28px}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="logo">Molecu<em>Lens</em></div>
+    <div class="tagline">Drug QSPR Pipeline &mdash; Topological Indices &times; Machine Learning</div>
+    <div class="backend-banner" id="backend-banner">
+      Backend not reachable at <strong id="api-url-label"></strong>.<br>
+      Start your server: <code>uvicorn website:app --reload --port 8000</code> then refresh this page.
+    </div>
+  </header>
+
+  <section class="search-section">
+    <div class="search-label">Enter a disease</div>
+    <div class="search-row">
+      <input id="disease-input" type="text" placeholder="e.g. diabetes, hypertension, alzheimer..." autocomplete="off" spellcheck="false"/>
+      <button class="run-btn" id="run-btn" onclick="handleRun()">Analyse &rarr;</button>
+    </div>
+    <div class="msg" id="msg-box"></div>
+    <div class="suggestions" id="suggestions-box"></div>
+  </section>
+
+  <section id="progress-section">
+    <div class="progress-header">
+      <span class="progress-title">Running &mdash; <em id="progress-disease" style="color:var(--accent);font-style:italic"></em></span>
+      <span class="progress-status" id="progress-status">Starting...</span>
+    </div>
+    <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    <div class="progress-steps">
+      <div class="step" id="step-fetch">  <div class="step-dot"></div><span>Fetching drugs — ChEMBL, PubChem, pkCSM</span></div>
+      <div class="step" id="step-filter"> <div class="step-dot"></div><span>Drug-likeness filters — Lipinski, Veber, PAINS</span></div>
+      <div class="step" id="step-topo">   <div class="step-dot"></div><span>Topological indices — M1, M2, ABC, R, H, F</span></div>
+      <div class="step" id="step-ml">     <div class="step-dot"></div><span>ML training — k-fold CV + hyperparameter tuning</span></div>
+      <div class="step" id="step-shap">   <div class="step-dot"></div><span>SHAP feature importance analysis</span></div>
+    </div>
+  </section>
+
+  <section id="results-section"></section>
+
+  <footer>
+    <span>MolecuLens &mdash; Drug QSPR Research Pipeline</span>
+    <span>Data: ChEMBL &middot; PubChem &middot; pkCSM</span>
+  </footer>
+</div>
+
+<script>
+// ── CONFIGURE YOUR BACKEND URL HERE ──────────────────────────────────────
+const API = '';
+// Empty string = same server as the page (works locally AND on Railway/any host)
+// Only change this if your frontend and backend are on different servers
+// ─────────────────────────────────────────────────────────────────────────
+
+let pollTimer      = null;
+let currentJobId   = null;
+let currentResults = null;
+
+// ── CHECK BACKEND ON LOAD ──
+window.addEventListener('load', async () => {
+  document.getElementById('api-url-label').textContent = API;
+  try {
+    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error('Bad response');
+    // Backend is up — show brief confirmation
+    setMsg('Backend connected. Enter a disease name to begin.', 'info');
+    setTimeout(clearMsg, 3000);
+  } catch {
+    document.getElementById('backend-banner').classList.add('show');
+    document.getElementById('disease-input').disabled = true;
+    document.getElementById('run-btn').disabled = true;
+  }
+});
+
+document.getElementById('disease-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleRun();
+});
+
+// ── HELPERS ──
+function setMsg(text, type) {
+  const el = document.getElementById('msg-box');
+  el.textContent = text;
+  el.className = 'msg show ' + type;
+}
+function clearMsg() {
+  const el = document.getElementById('msg-box');
+  el.className = 'msg';
+}
+function setBtn(disabled, label) {
+  const b = document.getElementById('run-btn');
+  b.disabled = disabled;
+  b.textContent = label ?? (disabled ? 'Running...' : 'Analyse →');
+}
+function showSuggestions(list) {
+  const box = document.getElementById('suggestions-box');
+  box.innerHTML = '';
+  list.forEach(s => {
+    const p = document.createElement('button');
+    p.className = 'pill';
+    p.textContent = s;
+    p.onclick = () => {
+      document.getElementById('disease-input').value = s;
+      document.getElementById('disease-input').classList.remove('error','warn');
+      box.innerHTML = '';
+      clearMsg();
+      handleRun();
+    };
+    box.appendChild(p);
+  });
+}
+function sectionHead(label) {
+  const el = document.createElement('div');
+  el.className = 'section-head';
+  el.innerHTML = `<h2>${label}</h2><div class="section-line"></div>`;
+  return el;
+}
+
+// ── VALIDATE ──
+async function handleRun() {
+  const raw = document.getElementById('disease-input').value.trim();
+  if (!raw) { setMsg('Please enter a disease name.', 'error'); return; }
+
+  clearMsg();
+  document.getElementById('suggestions-box').innerHTML = '';
+  document.getElementById('disease-input').classList.remove('error','warn');
+  setBtn(true);
+
+  let v;
+  try {
+    const res = await fetch(`${API}/validate`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({disease: raw}),
+      signal: AbortSignal.timeout(10000),
+    });
+    v = await res.json();
+  } catch (e) {
+    setMsg('Cannot reach backend. Is the server running?', 'error');
+    setBtn(false, 'Analyse →');
+    return;
+  }
+
+  if (!v.valid) {
+    document.getElementById('disease-input').classList.add('error');
+    if (v.errors?.length)      setMsg(v.errors[0], 'error');
+    if (v.suggestions?.length) showSuggestions(v.suggestions);
+    setBtn(false, 'Analyse →');
+    return;
+  }
+
+  if (v.warnings?.length) {
+    document.getElementById('disease-input').classList.add('warn');
+    setMsg(v.warnings[0], 'warn');
+  }
+
+  runPipeline(v.disease || raw, !!v.warnings?.length);
+}
+
+// ── RUN PIPELINE ──
+async function runPipeline(disease, force) {
+  showProgress(disease);
+
+  let jobId;
+  try {
+    const res = await fetch(`${API}/run`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({disease, force_proceed: force}),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.detail?.errors?.[0] || 'Pipeline failed to start.');
+    }
+    const data = await res.json();
+    jobId = data.job_id;
+    currentJobId = jobId;
+  } catch (e) {
+    hideProgress();
+    setMsg(e.message, 'error');
+    setBtn(false, 'Analyse →');
+    return;
+  }
+
+  poll(jobId);
+}
+
+// ── POLL STATUS ──
+function poll(jobId) {
+  if (pollTimer) clearInterval(pollTimer);
+  const STEPS = ['step-fetch','step-filter','step-topo','step-ml','step-shap'];
+  // Approximate seconds when each step starts
+  const TIMINGS = [0, 35, 65, 95, 130];
+  let stepIdx = 0;
+  let elapsed = 0;
+  advanceStep(STEPS[0]);
+
+  pollTimer = setInterval(async () => {
+    elapsed += 5;
+
+    // Advance visual step based on time elapsed
+    const due = TIMINGS.filter(t => elapsed >= t).length - 1;
+    const next = Math.min(due, STEPS.length - 1);
+    if (next > stepIdx) {
+      markDone(STEPS[stepIdx]);
+      stepIdx = next;
+      advanceStep(STEPS[stepIdx]);
+    }
+
+    try {
+      const res  = await fetch(`${API}/status/${jobId}`, {signal: AbortSignal.timeout(6000)});
+      const data = await res.json();
+      document.getElementById('progress-status').textContent = data.status;
+
+      if (data.status === 'complete') {
+        clearInterval(pollTimer);
+        STEPS.forEach(s => markDone(s));
+        document.getElementById('progress-bar').classList.add('done');
+        const rRes    = await fetch(`${API}/results/${jobId}`);
+        const results = await rRes.json();
+        renderResults(results, jobId);
+
+      } else if (data.status === 'failed') {
+        clearInterval(pollTimer);
+        hideProgress();
+        setMsg('Pipeline failed: ' + (data.error || 'Check server logs for details.'), 'error');
+        setBtn(false, 'Analyse →');
+      }
+    } catch {
+      // Transient network blip — keep polling silently
+    }
+  }, 5000);
+}
+
+// ── PROGRESS UI ──
+function showProgress(disease) {
+  if (pollTimer) clearInterval(pollTimer);
+  document.getElementById('progress-disease').textContent = disease;
+  document.getElementById('progress-section').style.display = 'block';
+  document.getElementById('results-section').style.display  = 'none';
+  document.getElementById('progress-bar').classList.remove('done');
+  document.querySelectorAll('.step').forEach(s => s.className = 'step');
+}
+function hideProgress() {
+  document.getElementById('progress-section').style.display = 'none';
+}
+function advanceStep(id) {
+  document.getElementById(id).className = 'step active';
+  const labels = {
+    'step-fetch':'Fetching drug data...','step-filter':'Filtering drugs...',
+    'step-topo':'Computing indices...','step-ml':'Training models...','step-shap':'SHAP analysis...'
+  };
+  document.getElementById('progress-status').textContent = labels[id] || 'Running...';
+}
+function markDone(id) {
+  const el = document.getElementById(id);
+  if (el) el.className = 'step done';
+}
+
+// ── RENDER RESULTS ──
+function renderResults(data, jobId) {
+  hideProgress();
+  setBtn(false, 'Analyse →');
+  clearMsg();
+  currentResults = data;
+
+  const sec = document.getElementById('results-section');
+  sec.style.display = 'block';
+  sec.innerHTML = '';
+
+  const n = data.drug_count || 1;
+
+  // Header + download
+  const hdr = document.createElement('div');
+  hdr.className = 'results-header fade-in';
+  hdr.innerHTML = `
+    <div><div class="results-title">Results for <em>${data.disease}</em></div></div>
+    <div class="results-meta">
+      <div>${data.drug_count} drugs analysed</div>
+      <div>${data.columns?.length ?? 0} properties per drug</div>
+      <a class="download-btn" href="${API}/download/${jobId}" download>
+        <svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>
+        Download full CSV
+      </a>
+    </div>`;
+  sec.appendChild(hdr);
+
+  // Stat cards
+  const lipPct = Math.round((data.lipinski_pass ?? 0) / n * 100);
+  const vebPct = Math.round((data.veber_pass    ?? 0) / n * 100);
+  const paiPct = Math.round((data.pains_pass    ?? 0) / n * 100);
+  const bestR2 = data.top_models?.length
+    ? Math.max(...data.top_models.map(m => m.R2_mean ?? 0)).toFixed(3) : '—';
+
+  const cards = document.createElement('div');
+  cards.className = 'stat-grid fade-in';
+  cards.innerHTML = `
+    <div class="stat-card"><div class="stat-label">Drugs analysed</div><div class="stat-value accent">${data.drug_count}</div></div>
+    <div class="stat-card"><div class="stat-label">Best R²</div><div class="stat-value">${bestR2}</div></div>
+    <div class="stat-card"><div class="stat-label">Lipinski pass</div><div class="stat-value">${lipPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.lipinski_pass ?? 0} of ${n}</div></div>
+    <div class="stat-card"><div class="stat-label">Veber pass</div><div class="stat-value">${vebPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.veber_pass ?? 0} of ${n}</div></div>
+    <div class="stat-card"><div class="stat-label">PAINS clean</div><div class="stat-value">${paiPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.pains_pass ?? 0} of ${n}</div></div>`;
+  sec.appendChild(cards);
+
+  // Best model per property
+  if (data.top_models?.length) {
+    sec.appendChild(sectionHead('Best model per property (k-fold CV)'));
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap fade-in';
+    wrap.innerHTML = `<table><thead><tr>
+      <th>Property</th><th>Best model</th><th>R² mean</th><th>R² std</th><th>MAE</th>
+    </tr></thead><tbody>${data.top_models.map(m => {
+      const r2  = typeof m.R2_mean  === 'number' ? m.R2_mean.toFixed(3)  : '—';
+      const std = typeof m.R2_std   === 'number' ? m.R2_std.toFixed(3)   : '—';
+      const mae = typeof m.MAE_mean === 'number' ? m.MAE_mean.toFixed(3) : '—';
+      const pct = Math.max(0, Math.min(100, (m.R2_mean ?? 0) * 100));
+      return `<tr>
+        <td>${m.Property}</td>
+        <td style="color:var(--accent)">${m.Model}</td>
+        <td><div class="r2-bar"><div class="r2-track"><div class="r2-fill" style="width:${pct}%"></div></div>${r2}</div></td>
+        <td style="color:var(--muted)">±${std}</td>
+        <td style="color:var(--muted)">${mae}</td></tr>`;
+    }).join('')}</tbody></table>`;
+    sec.appendChild(wrap);
+  }
+
+  // All ML results
+  if (data.ml_results?.length) {
+    sec.appendChild(sectionHead('All model results'));
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap fade-in';
+    wrap.innerHTML = `<table><thead><tr>
+      <th>Property</th><th>Model</th><th>R² mean</th><th>R² std</th><th>MAE</th>
+    </tr></thead><tbody>${data.ml_results.map(m => `<tr>
+        <td>${m.Property}</td><td>${m.Model}</td>
+        <td>${typeof m.R2_mean  === 'number' ? m.R2_mean.toFixed(3)  : '—'}</td>
+        <td style="color:var(--muted)">±${typeof m.R2_std   === 'number' ? m.R2_std.toFixed(3)   : '—'}</td>
+        <td style="color:var(--muted)">${typeof m.MAE_mean === 'number' ? m.MAE_mean.toFixed(3) : '—'}</td>
+      </tr>`).join('')}</tbody></table>`;
+    sec.appendChild(wrap);
+  }
+
+  // SHAP
+  if (data.shap && Object.keys(data.shap).length) {
+    sec.appendChild(sectionHead('Feature importance (SHAP)'));
+    const props = Object.keys(data.shap);
+    const shapWrap = document.createElement('div');
+    shapWrap.className = 'fade-in';
+    const sel = document.createElement('select');
+    sel.className = 'shap-prop-select';
+    sel.id = 'shap-select';
+    props.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
+    sel.onchange = () => renderShap(sel.value);
+    const shapGrid = document.createElement('div');
+    shapGrid.className = 'shap-grid';
+    shapGrid.id = 'shap-grid';
+    shapWrap.appendChild(sel);
+    shapWrap.appendChild(shapGrid);
+    sec.appendChild(shapWrap);
+    renderShap(props[0]);
+  }
+
+  // Pearson correlation heatmap
+  if (data.correlation && Object.keys(data.correlation).length) {
+    sec.appendChild(sectionHead('Pearson correlation matrix'));
+    renderHeatmap(data.correlation, sec);
+  }
+
+  // Drug data preview
+  if (data.drugs_preview?.length) {
+    sec.appendChild(sectionHead('Drug data preview — first 10 rows'));
+    const note = document.createElement('div');
+    note.className = 'drug-table-note';
+    note.textContent = 'Showing a subset of columns. Download the full CSV for all drugs and all properties.';
+    sec.appendChild(note);
+
+    const allCols = Object.keys(data.drugs_preview[0]);
+    const priority = ['ChEMBL_ID','MolWt','LogP','TPSA','HBD','HBA','RotBonds',
+      'PC_XLogP','PC_Complexity','PC_HeavyAtomCount','M1','M2','ABC','R','H','F',
+      'Lipinski_Pass','Veber_Pass','PAINS_Pass'];
+    const cols = [...priority.filter(c => allCols.includes(c)),
+                  ...allCols.filter(c => !priority.includes(c) && c !== 'SMILES')];
+
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap fade-in';
+    wrap.innerHTML = `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${data.drugs_preview.map(row => '<tr>' + cols.map(c => {
+        const v = row[c];
+        if (['Lipinski_Pass','Veber_Pass','PAINS_Pass'].includes(c))
+          return `<td><span class="badge ${v?'pass':'fail'}">${v?'PASS':'FAIL'}</span></td>`;
+        if (typeof v === 'number') return `<td>${v.toFixed(3)}</td>`;
+        return `<td>${v ?? '—'}</td>`;
+      }).join('') + '</tr>').join('')}</tbody></table>`;
+    sec.appendChild(wrap);
+  }
+
+  // New search
+  const nb = document.createElement('button');
+  nb.className = 'new-search-btn';
+  nb.textContent = '← New search';
+  nb.onclick = () => {
+    sec.style.display = 'none';
+    document.getElementById('disease-input').value = '';
+    document.getElementById('disease-input').classList.remove('error','warn');
+    clearMsg();
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+  sec.appendChild(nb);
+  sec.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ── SHAP ──
+function renderShap(prop) {
+  if (!currentResults?.shap?.[prop]) return;
+  const vals   = currentResults.shap[prop];
+  const max    = Math.max(...Object.values(vals));
+  const grid   = document.getElementById('shap-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(vals).sort((a,b) => b[1]-a[1]).map(([feat, val]) => `
+    <div class="shap-row">
+      <div class="shap-feat">${feat}</div>
+      <div class="shap-track"><div class="shap-fill" style="width:${max>0?(val/max*100).toFixed(1):0}%"></div></div>
+      <div class="shap-val">${val.toFixed(5)}</div>
+    </div>`).join('');
+}
+
+// ── HEATMAP ──
+function renderHeatmap(corr, sec) {
+  const indices = Object.keys(corr);
+  const props   = Object.keys(corr[indices[0]] || {});
+  if (!indices.length || !props.length) return;
+  function clr(v) {
+    const a = Math.abs(v);
+    return v >= 0
+      ? `rgba(74,${Math.round(160+a*80)},${Math.round(130+a*50)},${0.15+a*0.55})`
+      : `rgba(240,${Math.round(100+a*40)},96,${0.15+a*0.55})`;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'heatmap-wrap fade-in';
+  wrap.innerHTML = `<table class="heatmap-table">
+    <thead><tr><th></th>${props.map(p=>`<th>${p}</th>`).join('')}</tr></thead>
+    <tbody>${indices.map(idx =>
+      `<tr><th class="row-label">${idx}</th>${props.map(p => {
+        const v = corr[idx]?.[p] ?? 0;
+        return `<td style="background:${clr(v)}">${v.toFixed(2)}</td>`;
+      }).join('')}</tr>`
+    ).join('')}</tbody></table>`;
+  sec.appendChild(wrap);
+}
+</script>
+</body>
+</html>
