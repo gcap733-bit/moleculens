@@ -356,9 +356,18 @@ function poll(jobId) {
         clearInterval(pollTimer);
         STEPS.forEach(s => markDone(s));
         document.getElementById('progress-bar').classList.add('done');
-        const rRes    = await fetch(`${API}/results/${jobId}`);
-        const results = await rRes.json();
-        renderResults(results, jobId);
+        // Fetch results with explicit error handling
+        try {
+          const rRes = await fetch(`${API}/results/${jobId}`);
+          if (!rRes.ok) throw new Error('HTTP ' + rRes.status);
+          const results = await rRes.json();
+          if (!results || typeof results !== 'object') throw new Error('Empty response');
+          renderResults(results, jobId);
+        } catch(fetchErr) {
+          hideProgress();
+          setMsg('Pipeline finished but results failed to load: ' + fetchErr.message + '. Try refreshing.', 'error');
+          setBtn(false, 'Analyse →');
+        }
 
       } else if (data.status === 'failed') {
         clearInterval(pollTimer);
