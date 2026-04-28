@@ -6,6 +6,9 @@
 import os
 import argparse
 import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 from config import OUTPUT_DIR, MAX_DRUGS
 from disease_validator import validate_disease_input
@@ -19,6 +22,242 @@ from ml import (
 )
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+# ==========================================
+# EXCEL EXPORT — all results in one workbook
+# ==========================================
+def _style_header(cell, bg="1F4E79"):
+    cell.font = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+    cell.fill = PatternFill("solid", start_color=bg)
+    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+def _style_subheader(cell):
+    cell.font = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+    cell.fill = PatternFill("solid", start_color="2E75B6")
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+def _thin_border():
+    s = Side(style="thin", color="CCCCCC")
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def _autofit(ws):
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            try:
+                max_len = max(max_len, len(str(cell.value or "")))
+            except:
+                pass
+        ws.column_dimensions[col_letter].width = min(max(max_len + 2, 10), 40)
+
+
+def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_path):
+    wb = Workbook()
+
+    # ── Sheet 1: Summary ──────────────────────────────────
+    ws = wb.active
+    ws.title = "Summary"
+    ws.sheet_view.showGridLines = False
+
+    ws.merge_cells("A1:F1")
+    ws["A1"] = f"MolecuLens QSPR Pipeline — {disease.title()}"
+    ws["A1"].font = Font(bold=True, size=16, color="1F4E79", name="Arial")
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 30
+
+    ws["A3"] = "Disease"; ws["B3"] = disease.title()
+    ws["A4"] = "Drugs analysed"; ws["B4"] = len(df)
+    ws["A5"] = "Properties per drug"; ws["B5"] = len(df.columns)
+
+    lipinski = int(df["Lipinski_Pass"].sum()) if "Lipinski_Pass" in df.columns else "N/A"
+    veber    = int(df["Veber_Pass"].sum())    if "Veber_Pass"    in df.columns else "N/A"
+    pains    = int(df["PAINS_Pass"].eq(True).sum()) if "PAINS_Pass" in df.columns else "N/A"
+    ws["A6"] = "Lipinski pass"; ws["B6"] = lipinski
+    ws["A7"] = "Veber pass";    ws["B7"] = veber
+    ws["A8"] = "PAINS clean";   ws["B8"] = pains
+
+    best = top_models.sort_values("R2_mean", ascending=False).iloc[0]
+    ws["A9"]  = "Best R² overall"
+    ws["B9"]  = round(float(best["R2_mean"]), 4)
+    ws["A10"] = "Best model"
+    ws["B10"] = f"{best['Model']} predicting {best['Property']}"
+
+    for row in ws["A3:A10"]:
+        for cell in row:
+            cell.font = Font(bold=True, name="Arial", size=10)
+    for row in ws["B3:B10"]:
+        for cell in row:
+            cell.font = Font(name="Arial", size=10)
+
+    ws["A12"] = "Sheets in this workbook:"
+    ws["A12"].font = Font(bold=True, name="Arial", size=10)
+    sheets_info = [
+        ("Drug Data",        "All drugs with physicochemical, ADMET, topological and filter properties"),
+        ("ML Results",       "R², MAE for all 4 models × 7 properties with k-fold CV"),
+        ("Best Models",      "Best model per property with performance metrics"),
+        ("SHAP Importance",  "Feature importance (SHAP values) per property"),
+        ("Correlation",      "Pearson correlation matrix — indices vs properties"),
+        ("Topological Index","Definition and formula for all 14 topological indices"),
+    ]
+    for i, (name, desc) in enumerate(sheets_info, start=13):
+        ws[f"A{i}"] = name
+        ws[f"B{i}"] = desc
+        ws[f"A{i}"].font = Font(bold=True, color="2E75B6", name="Arial", size=10)
+        ws[f"B{i}"].font = Font(name="Arial", size=10)
+
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 55
+
+    # ── Sheet 2: Drug Data ────────────────────────────────
+    ws2 = wb.create_sheet("Drug Data")
+    ws2.sheet_view.showGridLines = False
+    headers = list(df.columns)
+    for ci, h in enumerate(headers, start=1):
+        cell = ws2.cell(row=1, column=ci, value=h)
+        _style_header(cell)
+    for ri, row in enumerate(df.itertuples(index=False), start=2):
+        for ci, val in enumerate(row, start=1):
+            c = ws2.cell(row=ri, column=ci, value=val if not isinstance(val, float) or val == val else None)
+            c.font = Font(name="Arial", size=9)
+            c.border = _thin_border()
+            if ri % 2 == 0:
+                c.fill = PatternFill("solid", start_color="EBF3FB")
+    ws2.freeze_panes = "A2"
+    _autofit(ws2)
+
+    # ── Sheet 3: ML Results ───────────────────────────────
+    ws3 = wb.create_sheet("ML Results")
+    ws3.sheet_view.showGridLines = False
+    ml_headers = ["Property", "Model", "R² Mean", "R² Std", "MAE Mean"]
+    for ci, h in enumerate(ml_headers, start=1):
+        _style_header(ws3.cell(row=1, column=ci, value=h))
+    for ri, row in enumerate(ml_results.itertuples(index=False), start=2):
+        vals = [row.Property, row.Model,
+                round(float(row.R2_mean), 4),
+                round(float(row.R2_std), 4),
+                round(float(row.MAE_mean), 4)]
+        for ci, val in enumerate(vals, start=1):
+            c = ws3.cell(row=ri, column=ci, value=val)
+            c.font = Font(name="Arial", size=10)
+            c.border = _thin_border()
+            if ri % 2 == 0:
+                c.fill = PatternFill("solid", start_color="EBF3FB")
+    ws3.freeze_panes = "A2"
+    _autofit(ws3)
+
+    # ── Sheet 4: Best Models ──────────────────────────────
+    ws4 = wb.create_sheet("Best Models")
+    ws4.sheet_view.showGridLines = False
+    for ci, h in enumerate(ml_headers, start=1):
+        _style_header(ws4.cell(row=1, column=ci, value=h))
+    for ri, row in enumerate(top_models.itertuples(index=False), start=2):
+        vals = [row.Property, row.Model,
+                round(float(row.R2_mean), 4),
+                round(float(row.R2_std), 4),
+                round(float(row.MAE_mean), 4)]
+        for ci, val in enumerate(vals, start=1):
+            c = ws4.cell(row=ri, column=ci, value=val)
+            c.font = Font(name="Arial", size=10)
+            c.border = _thin_border()
+            if ri % 2 == 0:
+                c.fill = PatternFill("solid", start_color="EBF3FB")
+    ws4.freeze_panes = "A2"
+    _autofit(ws4)
+
+    # ── Sheet 5: SHAP Importance ──────────────────────────
+    ws5 = wb.create_sheet("SHAP Importance")
+    ws5.sheet_view.showGridLines = False
+    ws5.cell(row=1, column=1, value="Property")
+    ws5.cell(row=1, column=2, value="Topological Index")
+    ws5.cell(row=1, column=3, value="Mean |SHAP|")
+    ws5.cell(row=1, column=4, value="Rank")
+    for c in [ws5.cell(row=1, column=i) for i in range(1,5)]:
+        _style_header(c)
+    ri = 2
+    for prop, feat_vals in shap_summaries.items():
+        sorted_feats = sorted(feat_vals.items(), key=lambda x: x[1], reverse=True)
+        for rank, (feat, val) in enumerate(sorted_feats, start=1):
+            ws5.cell(row=ri, column=1, value=prop).font   = Font(name="Arial", size=10)
+            ws5.cell(row=ri, column=2, value=feat).font   = Font(name="Arial", size=10)
+            ws5.cell(row=ri, column=3, value=round(val,6)).font = Font(name="Arial", size=10)
+            ws5.cell(row=ri, column=4, value=rank).font  = Font(name="Arial", size=10)
+            for ci in range(1,5):
+                ws5.cell(row=ri, column=ci).border = _thin_border()
+                if ri % 2 == 0:
+                    ws5.cell(row=ri, column=ci).fill = PatternFill("solid", start_color="EBF3FB")
+            ri += 1
+    ws5.freeze_panes = "A2"
+    _autofit(ws5)
+
+    # ── Sheet 6: Correlation Matrix ───────────────────────
+    ws6 = wb.create_sheet("Correlation")
+    ws6.sheet_view.showGridLines = False
+    indices = list(corr.index)
+    props   = list(corr.columns)
+    ws6.cell(row=1, column=1, value="Index \ Property")
+    _style_header(ws6.cell(row=1, column=1))
+    for ci, p in enumerate(props, start=2):
+        _style_header(ws6.cell(row=1, column=ci, value=p))
+    for ri, idx in enumerate(indices, start=2):
+        _style_subheader(ws6.cell(row=ri, column=1, value=idx))
+        for ci, p in enumerate(props, start=2):
+            val = round(float(corr.loc[idx, p]), 3)
+            c = ws6.cell(row=ri, column=ci, value=val)
+            c.font = Font(name="Arial", size=10)
+            c.alignment = Alignment(horizontal="center")
+            c.border = _thin_border()
+            # Colour cells by correlation strength
+            abs_val = abs(val)
+            if val > 0:
+                intensity = int(abs_val * 180)
+                r, g, b = 255-intensity, 255, 255-intensity
+            else:
+                intensity = int(abs_val * 180)
+                r, g, b = 255, 255-intensity, 255-intensity
+            hex_color = f"{r:02X}{g:02X}{b:02X}"
+            c.fill = PatternFill("solid", start_color=hex_color)
+    _autofit(ws6)
+
+    # ── Sheet 7: Index Definitions ────────────────────────
+    ws7 = wb.create_sheet("Topological Index")
+    ws7.sheet_view.showGridLines = False
+    def_headers = ["Index", "Full Name", "Type", "Formula / Description"]
+    for ci, h in enumerate(def_headers, start=1):
+        _style_header(ws7.cell(row=1, column=ci, value=h))
+    definitions = [
+        ("M1",  "First Zagreb Index",         "Degree-based", "Sum of squared vertex degrees: Σ d(v)²"),
+        ("M2",  "Second Zagreb Index",         "Degree-based", "Sum of products of endpoint degrees: Σ d(u)·d(v) over edges"),
+        ("ABC", "Atom-Bond Connectivity",      "Degree-based", "Σ √((d(u)+d(v)-2)/(d(u)·d(v))) over edges"),
+        ("R",   "Randic Connectivity",         "Degree-based", "Σ 1/√(d(u)·d(v)) over edges"),
+        ("H",   "Harmonic Index",              "Degree-based", "Σ 2/(d(u)+d(v)) over edges"),
+        ("F",   "Forgotten Index",             "Degree-based", "Sum of cubed vertex degrees: Σ d(v)³"),
+        ("AZI", "Augmented Zagreb Index",      "Degree-based", "Σ (d(u)·d(v)/(d(u)+d(v)-2))³ over edges"),
+        ("GA",  "Geometric-Arithmetic Index",  "Degree-based", "Σ 2√(d(u)·d(v))/(d(u)+d(v)) over edges"),
+        ("SC",  "Sum-Connectivity Index",      "Degree-based", "Σ 1/√(d(u)+d(v)) over edges"),
+        ("W",   "Wiener Index",                "Distance-based","Sum of all pairwise shortest-path distances: Σ d(u,v)"),
+        ("J",   "Balaban J Index",             "Distance-based","(m/(m-n+2)) · Σ 1/√(s(u)·s(v)) where s(v)=sum of distances"),
+        ("Z",   "Hosoya Z Index",              "Distance-based","Total number of matchings in the molecular graph"),
+        ("Sz",  "Szeged Index",                "Distance-based","Σ n_u(e)·n_v(e) over edges; n_u = atoms closer to u"),
+        ("GE",  "Graph Entropy",               "Information",  "Shannon entropy of degree distribution: -Σ p(d)·log₂(p(d))"),
+    ]
+    for ri, row in enumerate(definitions, start=2):
+        for ci, val in enumerate(row, start=1):
+            c = ws7.cell(row=ri, column=ci, value=val)
+            c.font = Font(name="Arial", size=10)
+            c.border = _thin_border()
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            if ri % 2 == 0:
+                c.fill = PatternFill("solid", start_color="EBF3FB")
+    ws7.column_dimensions["A"].width = 8
+    ws7.column_dimensions["B"].width = 28
+    ws7.column_dimensions["C"].width = 16
+    ws7.column_dimensions["D"].width = 55
+    ws7.freeze_panes = "A2"
+
+    wb.save(out_path)
+    print(f"    [✓] Excel workbook saved → {out_path}")
 
 
 def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
@@ -42,12 +281,26 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         .reset_index(drop=True)
     )
 
-    out_path = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
-    df.to_csv(out_path, index=False)
+    csv_path  = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
+    xlsx_path = os.path.join(OUTPUT_DIR, f"{disease}_results.xlsx")
 
-    print(f"\n[*] Pipeline complete → {out_path}")
+    df.to_csv(csv_path, index=False)
+
+    export_excel(
+        disease=disease,
+        df=df,
+        corr=corr,
+        ml_results=ml_results,
+        top_models=top_models,
+        shap_summaries=shap_summaries,
+        out_path=xlsx_path,
+    )
+
+    print(f"\n[*] Pipeline complete")
     print(f"    Drugs processed : {len(df)}")
     print(f"    Total columns   : {len(df.columns)}")
+    print(f"    CSV  → {csv_path}")
+    print(f"    XLSX → {xlsx_path}")
 
     return {
         "disease":        disease,
@@ -60,7 +313,8 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         "lipinski_pass":  int(df["Lipinski_Pass"].sum()),
         "veber_pass":     int(df["Veber_Pass"].sum()),
         "pains_pass":     int(df["PAINS_Pass"].eq(True).sum()),
-        "csv_path":       out_path,
+        "csv_path":       csv_path,
+        "xlsx_path":      xlsx_path,
         "drugs_preview":  df.head(10).to_dict(orient="records"),
     }
 
