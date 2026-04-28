@@ -27,53 +27,130 @@ from config import TOPO_INDICES, ML_TARGETS, CV_FOLDS, RANDOM_STATE
 
 
 # ==========================================
-# ALGORITHM 1: Topological Indices
+# DISTANCE MATRIX HELPER
+# ==========================================
+def _distance_matrix(mol):
+    n = mol.GetNumAtoms()
+    INF = float('inf')
+    dist = [[INF]*n for _ in range(n)]
+    for i in range(n):
+        dist[i][i] = 0
+    for bond in mol.GetBonds():
+        u, v = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        dist[u][v] = dist[v][u] = 1
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if dist[i][k] + dist[k][j] < dist[i][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
+    return dist
+
+
+# ==========================================
+# ALGORITHM 1: Topological Indices (14 total)
 # ==========================================
 def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Computes 6 graph-theoretic topological indices per molecule:
-      M1  — First Zagreb index (sum of squared vertex degrees)
-      M2  — Second Zagreb index (sum of edge degree products)
-      ABC — Atom-bond connectivity index
-      R   — Randic connectivity index
-      H   — Harmonic index
-      F   — Forgotten topological index (sum of cubed degrees)
+    Computes 14 topological indices per molecule:
+    Degree-based: M1, M2, ABC, R, H, F, AZI, GA, SC
+    Distance-based: W (Wiener), J (Balaban), Z (Hosoya), Sz (Szeged), GE (Graph Entropy)
     """
-    print("[*] Computing topological indices...")
-    results = {k: [] for k in TOPO_INDICES}
+    print("[*] Computing 14 topological indices...")
+    all_keys = TOPO_INDICES
+    results = {k: [] for k in all_keys}
 
     for smiles in df["SMILES"]:
         try:
             mol = Chem.RemoveHs(Chem.MolFromSmiles(smiles))
-            m1, m2, abc, r, h, f = 0, 0, 0, 0, 0, 0
+            n = mol.GetNumAtoms()
+            m_bonds = mol.GetNumBonds()
+            INF = float('inf')
 
-            for atom in mol.GetAtoms():
-                d = atom.GetDegree()
-                m1 += d ** 2
-                f  += d ** 3
+            # Degree-based
+            m1 = m2 = abc = r = h = f = azi = ga = sc = 0
+            degrees = [a.GetDegree() for a in mol.GetAtoms()]
+            deg_sum = sum(degrees)
+
+            for d in degrees:
+                m1 += d**2
+                f  += d**3
 
             for bond in mol.GetBonds():
                 u = bond.GetBeginAtom().GetDegree()
                 v = bond.GetEndAtom().GetDegree()
-                if u * v == 0:
-                    continue
-                m2  += u * v
-                abc += math.sqrt((u + v - 2) / (u * v))
-                r   += 1 / math.sqrt(u * v)
-                h   += 2 / (u + v)
+                if u*v == 0: continue
+                m2  += u*v
+                r   += 1/math.sqrt(u*v)
+                h   += 2/(u+v)
+                sc  += 1/math.sqrt(u+v)
+                ga  += 2*math.sqrt(u*v)/(u+v)
+                if (u+v-2) > 0:
+                    abc += math.sqrt((u+v-2)/(u*v))
+                if (u+v-2) != 0:
+                    azi += (u*v/(u+v-2))**3
 
-            for k, val in zip(TOPO_INDICES, [m1, m2, abc, r, h, f]):
+            # Graph entropy (Shannon, degree-based)
+            ge = 0.0
+            if deg_sum > 0:
+                for d in degrees:
+                    if d > 0:
+                        p = d/deg_sum
+                        ge -= p*math.log2(p)
+
+            # Distance matrix
+            dist = _distance_matrix(mol)
+
+            # Wiener index
+            w = sum(dist[i][j] for i in range(n) for j in range(i+1,n) if dist[i][j] != INF)
+
+            # Balaban J index
+            s = [sum(dist[i][j] for j in range(n) if dist[i][j] != INF) for i in range(n)]
+            cyclo = m_bonds - n + 2
+            j_bal = 0
+            if cyclo > 0:
+                j_sum = sum(1/math.sqrt(s[bond.GetBeginAtomIdx()]*s[bond.GetEndAtomIdx()])
+                            for bond in mol.GetBonds()
+                            if s[bond.GetBeginAtomIdx()]>0 and s[bond.GetEndAtomIdx()]>0)
+                j_bal = (m_bonds/cyclo)*j_sum
+
+            # Hosoya Z index (number of matchings via DP)
+            edge_list = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol.GetBonds()]
+            p = [0]*(m_bonds+1); p[0] = 1
+            def count_match(idx, matched):
+                if idx == len(edge_list): return
+                count_match(idx+1, matched)
+                u_e, v_e = edge_list[idx]
+                if u_e not in matched and v_e not in matched:
+                    matched.add(u_e); matched.add(v_e)
+                    sz2 = len(matched)//2
+                    if sz2 < len(p): p[sz2] += 1
+                    count_match(idx+1, matched)
+                    matched.remove(u_e); matched.remove(v_e)
+            if len(edge_list) <= 18:
+                count_match(0, set())
+            z_hosoya = sum(p)
+
+            # Szeged index
+            sz = 0
+            for bond in mol.GetBonds():
+                ui, vi = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                n_u = sum(1 for k2 in range(n) if dist[ui][k2]!=INF and dist[vi][k2]!=INF and dist[ui][k2]<dist[vi][k2])
+                n_v = sum(1 for k2 in range(n) if dist[ui][k2]!=INF and dist[vi][k2]!=INF and dist[vi][k2]<dist[ui][k2])
+                sz += n_u*n_v
+
+            vals = [m1, m2, abc, r, h, f, azi, ga, sc, w, j_bal, z_hosoya, sz, ge]
+            for k, val in zip(all_keys, vals):
                 results[k].append(val)
+
         except:
-            for k in TOPO_INDICES:
+            for k in all_keys:
                 results[k].append(np.nan)
 
     for k, vals in results.items():
         df[k] = vals
-
-    df.dropna(subset=TOPO_INDICES, inplace=True)
+    df.dropna(subset=all_keys, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    print(f"    [✓] Topological indices computed for {len(df)} molecules.")
+    print(f"    [✓] 14 topological indices computed for {len(df)} molecules.")
     return df
 
 
