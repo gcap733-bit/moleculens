@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 
 from config import API_HOST, API_PORT, CORS_ORIGINS, MAX_DRUGS
-from validator import validate_disease_input
+from disease_validator import validate_disease_input
 from main import run_pipeline
 
 app = FastAPI(
