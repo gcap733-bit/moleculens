@@ -22,51 +22,32 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
-    """
-    Full pipeline: fetch → compute → filter → ML → SHAP.
-    Returns a results dict suitable for JSON serialisation
-    (used by both CLI and the FastAPI website).
-    """
     print(f"\n{'='*50}")
     print(f"  Drug Pipeline: {disease.upper()}")
     print(f"{'='*50}\n")
 
-    # 1. Fetch all data
     df = fetch_all(disease, max_drugs)
     if df.empty:
         return {"error": f"No data found for '{disease}'."}
 
-    # 2. Drug-likeness filters
     df = apply_drug_filters(df)
-
-    # 3. Topological indices
     df = compute_topological_indices(df)
-
-    # 4. Pearson correlation
     corr = run_correlation(df)
-
-    # 5. ML with CV + tuning
     ml_results, best_models = run_ml_qspr(df)
-
-    # 6. SHAP
     shap_summaries = compute_shap(df, best_models)
 
-    # 7. Best model per property
     top_models = (
         ml_results.sort_values("R2_mean", ascending=False)
         .drop_duplicates("Property")
         .reset_index(drop=True)
     )
 
-    # 8. Export CSV
     out_path = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
     df.to_csv(out_path, index=False)
 
     print(f"\n[*] Pipeline complete → {out_path}")
     print(f"    Drugs processed : {len(df)}")
     print(f"    Total columns   : {len(df.columns)}")
-    print("\n--- Best model per property ---")
-    print(top_models.to_string(index=False))
 
     return {
         "disease":        disease,
@@ -86,16 +67,15 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Drug QSPR Pipeline")
-    parser.add_argument("--disease",   type=str, required=True, help="Disease name (e.g. diabetes)")
-    parser.add_argument("--max_drugs", type=int, default=MAX_DRUGS, help="Max drugs to fetch")
-    parser.add_argument("--no_cache",  action="store_true", help="Bypass disk cache")
+    parser.add_argument("--disease",   type=str, required=True)
+    parser.add_argument("--max_drugs", type=int, default=MAX_DRUGS)
+    parser.add_argument("--no_cache",  action="store_true")
     args = parser.parse_args()
 
     if args.no_cache:
         import config
         config.CACHE_ENABLED = False
 
-    # Validate
     validation = validate_disease_input(args.disease)
     if not validation["valid"]:
         for e in validation["errors"]:
