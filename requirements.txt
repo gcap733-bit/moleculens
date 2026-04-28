@@ -14,3 +14,4 @@ shap
 fastapi
 uvicorn[standard]
 python-multipart
+openpyxl
