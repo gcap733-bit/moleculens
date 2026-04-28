@@ -119,7 +119,7 @@ def results_endpoint(job_id: str):
 
 
 @app.get("/download/{job_id}")
-def download_endpoint(job_id: str):
+def download_csv(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -129,6 +129,23 @@ def download_endpoint(job_id: str):
     if not csv_path or not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail="CSV file not found.")
     return FileResponse(path=csv_path, filename=f"{job['disease']}_results.csv", media_type="text/csv")
+
+
+@app.get("/download-excel/{job_id}")
+def download_excel(job_id: str):
+    job = JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    if job["status"] != "complete":
+        raise HTTPException(status_code=202, detail="Job not yet complete.")
+    xlsx_path = job["results"].get("xlsx_path")
+    if not xlsx_path or not os.path.exists(xlsx_path):
+        raise HTTPException(status_code=404, detail="Excel file not found.")
+    return FileResponse(
+        path=xlsx_path,
+        filename=f"{job['disease']}_results.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 if __name__ == "__main__":
