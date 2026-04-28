@@ -31,7 +31,25 @@ API_PORT = 8000
 CORS_ORIGINS = ["*"]     # restrict this in production
 
 # --- Topological indices computed ---
-TOPO_INDICES = ["M1", "M2", "ABC", "R", "H", "F"]
+TOPO_INDICES = [
+    # Degree-based (original 6)
+    "M1",   # First Zagreb index
+    "M2",   # Second Zagreb index
+    "ABC",  # Atom-bond connectivity
+    "R",    # Randic connectivity
+    "H",    # Harmonic index
+    "F",    # Forgotten topological index
+    # Degree-based (new 3)
+    "AZI",  # Augmented Zagreb index
+    "GA",   # Geometric-Arithmetic index
+    "SC",   # Sum-Connectivity index
+    # Distance-based (new 5)
+    "W",    # Wiener index
+    "J",    # Balaban J index
+    "Z",    # Hosoya Z index
+    "Sz",   # Szeged index
+    "GE",   # Graph entropy (Shannon)
+]
 
 # --- ML targets (ChEMBL-derived properties) ---
 ML_TARGETS = ["MolWt", "LogP", "TPSA", "HBD", "HBA", "RotBonds", "MolMR"]
