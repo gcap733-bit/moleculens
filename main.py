@@ -340,8 +340,9 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         .reset_index(drop=True)
     )
 
-    csv_path  = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
-    xlsx_path = os.path.join(OUTPUT_DIR, f"{disease}_results.xlsx")
+    csv_path      = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
+    xlsx_path     = os.path.join(OUTPUT_DIR, f"{disease}_results.xlsx")
+    results_cache = os.path.join(OUTPUT_DIR, f"{disease}_results_cache.json")
 
     df.to_csv(csv_path, index=False)
 
@@ -361,7 +362,7 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
     print(f"    CSV  → {csv_path}")
     print(f"    XLSX → {xlsx_path}")
 
-    return {
+    result = {
         "disease":        disease,
         "drug_count":     len(df),
         "columns":        list(df.columns),
@@ -376,6 +377,17 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         "xlsx_path":      xlsx_path,
         "drugs_preview":  df.head(10).to_dict(orient="records"),
     }
+
+    # Cache full results so repeat searches return instantly
+    try:
+        import json
+        with open(results_cache, "w") as f:
+            json.dump(result, f, default=str)
+        print(f"    Results cached → {results_cache}")
+    except Exception as e:
+        print(f"    [!] Could not cache results: {e}")
+
+    return result
 
 
 def main():
