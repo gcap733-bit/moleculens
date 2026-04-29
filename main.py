@@ -332,7 +332,11 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
     df = compute_topological_indices(df)
     corr_data = run_correlation(df)
     ml_results, best_models = run_ml_qspr(df)
-    shap_summaries = compute_shap(df, best_models)
+    try:
+        shap_summaries = compute_shap(df, best_models)
+    except Exception as e:
+        print(f"    [!] SHAP failed: {e} — continuing without SHAP")
+        shap_summaries = {}
 
     top_models = (
         ml_results.sort_values("R2_mean", ascending=False)
