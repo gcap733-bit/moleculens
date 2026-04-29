@@ -52,15 +52,21 @@ def _distance_matrix(mol):
 
 
 # ==========================================
-# ALGORITHM 1: Topological Indices (14 total)
+# ALGORITHM 1: Topological Indices (34 total)
 # ==========================================
 def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Computes 14 topological indices per molecule:
-    Degree-based: M1, M2, ABC, R, H, F, AZI, GA, SC
-    Distance-based: W (Wiener), J (Balaban), Z (Hosoya), Sz (Szeged), GE (Graph Entropy)
+    Computes 34 topological indices per molecule across 4 families:
+
+    Original degree-based (9): M1, M2, ABC, R, H, F, AZI, GA, SC
+    New degree-based from literature (11): BM, TM, GH, GBM, GTM, HG, BMG, BMH, TMG, TMH, SDD
+    Reverse-degree variants (9): RM1, RM2, RABC, RR, RH, RF, RGA, RBM, RSDD
+      (use n+1-d(v) as the reverse degree for each vertex)
+    Degree-sum variants (5): DS1, DS2, DSR, DSH, DSGA
+      (use d(u)+d(v) as edge weight)
+    Distance-based (5): W (Wiener), J (Balaban), Z (Hosoya), Sz (Szeged), GE (Graph Entropy)
     """
-    print("[*] Computing 14 topological indices...")
+    print("[*] Computing 34 topological indices...")
     all_keys = TOPO_INDICES
     results = {k: [] for k in all_keys}
 
@@ -69,13 +75,14 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
             mol = Chem.RemoveHs(Chem.MolFromSmiles(smiles))
             n = mol.GetNumAtoms()
             m_bonds = mol.GetNumBonds()
-            INF = float('inf')
+            INF = float("inf")
 
-            # Degree-based
-            m1 = m2 = abc = r = h = f = azi = ga = sc = 0
             degrees = [a.GetDegree() for a in mol.GetAtoms()]
             deg_sum = sum(degrees)
+            max_deg = max(degrees) if degrees else 1
 
+            # ── Original degree-based ────────────────────────
+            m1 = m2 = abc = r = h = f = azi = ga = sc = 0
             for d in degrees:
                 m1 += d**2
                 f  += d**3
@@ -94,7 +101,77 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 if (u+v-2) != 0:
                     azi += (u*v/(u+v-2))**3
 
-            # Graph entropy (Shannon, degree-based)
+            # ── New degree-based indices from image ──────────
+            bm = tm = gh = gbm = gtm = hg = bmg = bmh = tmg = tmh = sdd = 0
+            for bond in mol.GetBonds():
+                u = bond.GetBeginAtom().GetDegree()
+                v = bond.GetEndAtom().GetDegree()
+                if u*v == 0: continue
+                suv  = u + v
+                pruv = u * v
+                suv2 = u**2 + v**2
+                squv = math.sqrt(pruv)
+
+                bm  += suv + pruv                         # Bi-Zagreb
+                tm  += suv2 + pruv                        # Tri-Zagreb
+                gh  += squv * suv / 2                     # Geometric-Harmonic
+                if (suv + pruv) != 0:
+                    gbm += squv / (suv + pruv)            # Geometric Bi-Zagreb
+                if (suv2 + pruv) != 0:
+                    gtm += squv / (suv2 + pruv)           # Geometric Tri-Zagreb
+                if squv * suv != 0:
+                    hg  += 2 / (squv * suv)               # Harmonic-Geometric
+                if squv != 0:
+                    bmg += (suv + pruv) / squv            # Bi Zagreb-Geometric
+                    tmg += (suv2 + pruv) / squv           # Tri Zagreb-Geometric
+                    sdd += suv2 / pruv                    # Symmetric Degree Division
+                bmh += (suv + pruv) * suv / 2             # Bi Zagreb-Harmonic
+                tmh += (suv2 + pruv) * suv / 2            # Tri Zagreb-Harmonic
+
+            # ── Reverse-degree variants ──────────────────────
+            # Reverse degree: rd(v) = n + 1 - d(v)
+            # This transforms high-degree hubs into low-degree nodes
+            # capturing complementary structural information
+            rev_deg = [n + 1 - d for d in degrees]
+            rm1 = rm2 = rabc = rr = rh = rf = rga = rbm = rsdd = 0
+            for d in rev_deg:
+                rm1 += d**2
+                rf  += d**3
+            for bond in mol.GetBonds():
+                ru = rev_deg[bond.GetBeginAtomIdx()]
+                rv = rev_deg[bond.GetEndAtomIdx()]
+                if ru*rv == 0: continue
+                rsuv  = ru + rv
+                rpruv = ru * rv
+                rsuv2 = ru**2 + rv**2
+                rsquv = math.sqrt(rpruv)
+                rm2  += rpruv
+                rr   += 1/rsquv
+                rh   += 2/rsuv
+                if rsquv != 0:
+                    rga  += 2*rsquv/rsuv
+                    rsdd += rsuv2/rpruv
+                rbm  += rsuv + rpruv
+                if (rsuv+rpruv) != 0:
+                    rabc += math.sqrt(abs(rsuv+rpruv-2)/rpruv) if rpruv > 0 else 0
+
+            # ── Degree-sum variants ──────────────────────────
+            # Use d(u)+d(v) as the primary weight for each edge
+            # Captures pair-wise connectivity strength
+            ds1 = ds2 = dsr = dsh = dsga = 0
+            for bond in mol.GetBonds():
+                u = bond.GetBeginAtom().GetDegree()
+                v = bond.GetEndAtom().GetDegree()
+                s = u + v
+                if s == 0: continue
+                ds1  += s**2
+                ds2  += s*s
+                dsr  += 1/math.sqrt(s)
+                dsh  += 2/s
+                if u*v > 0:
+                    dsga += 2*math.sqrt(u*v)/s
+
+            # ── Graph entropy ────────────────────────────────
             ge = 0.0
             if deg_sum > 0:
                 for d in degrees:
@@ -102,25 +179,22 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                         p = d/deg_sum
                         ge -= p*math.log2(p)
 
-            # Distance matrix
+            # ── Distance-based ───────────────────────────────
             dist = _distance_matrix(mol)
-
-            # Wiener index
-            w = sum(dist[i][j] for i in range(n) for j in range(i+1,n) if dist[i][j] != INF)
-
-            # Balaban J index
-            s = [sum(dist[i][j] for j in range(n) if dist[i][j] != INF) for i in range(n)]
+            w = sum(dist[i][j] for i in range(n) for j in range(i+1,n)
+                    if dist[i][j] != INF)
+            s_dist = [sum(dist[i][j] for j in range(n) if dist[i][j] != INF)
+                      for i in range(n)]
             cyclo = m_bonds - n + 2
             j_bal = 0
             if cyclo > 0:
-                j_sum = sum(1/math.sqrt(s[bond.GetBeginAtomIdx()]*s[bond.GetEndAtomIdx()])
+                j_sum = sum(1/math.sqrt(s_dist[bond.GetBeginAtomIdx()]*s_dist[bond.GetEndAtomIdx()])
                             for bond in mol.GetBonds()
-                            if s[bond.GetBeginAtomIdx()]>0 and s[bond.GetEndAtomIdx()]>0)
+                            if s_dist[bond.GetBeginAtomIdx()]>0 and s_dist[bond.GetEndAtomIdx()]>0)
                 j_bal = (m_bonds/cyclo)*j_sum
 
-            # Hosoya Z index (number of matchings via DP)
             edge_list = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol.GetBonds()]
-            p = [0]*(m_bonds+1); p[0] = 1
+            p_match = [0]*(m_bonds+1); p_match[0] = 1
             def count_match(idx, matched):
                 if idx == len(edge_list): return
                 count_match(idx+1, matched)
@@ -128,14 +202,13 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 if u_e not in matched and v_e not in matched:
                     matched.add(u_e); matched.add(v_e)
                     sz2 = len(matched)//2
-                    if sz2 < len(p): p[sz2] += 1
+                    if sz2 < len(p_match): p_match[sz2] += 1
                     count_match(idx+1, matched)
                     matched.remove(u_e); matched.remove(v_e)
             if len(edge_list) <= 18:
                 count_match(0, set())
-            z_hosoya = sum(p)
+            z_hosoya = sum(p_match)
 
-            # Szeged index
             sz = 0
             for bond in mol.GetBonds():
                 ui, vi = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
@@ -143,11 +216,23 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 n_v = sum(1 for k2 in range(n) if dist[ui][k2]!=INF and dist[vi][k2]!=INF and dist[vi][k2]<dist[ui][k2])
                 sz += n_u*n_v
 
-            vals = [m1, m2, abc, r, h, f, azi, ga, sc, w, j_bal, z_hosoya, sz, ge]
+            vals = [
+                # Original (9)
+                m1, m2, abc, r, h, f, azi, ga, sc,
+                # New from image (11)
+                bm, tm, gh, gbm, gtm, hg, bmg, bmh, tmg, tmh, sdd,
+                # Reverse-degree (9)
+                rm1, rm2, rabc, rr, rh, rf, rga, rbm, rsdd,
+                # Degree-sum (5)
+                ds1, ds2, dsr, dsh, dsga,
+                # Distance-based (5)
+                w, j_bal, z_hosoya, sz, ge,
+            ]
+
             for k, val in zip(all_keys, vals):
                 results[k].append(val)
 
-        except:
+        except Exception as e:
             for k in all_keys:
                 results[k].append(np.nan)
 
@@ -155,7 +240,7 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
         df[k] = vals
     df.dropna(subset=all_keys, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    print(f"    [✓] 14 topological indices computed for {len(df)} molecules.")
+    print(f"    [✓] 34 topological indices computed for {len(df)} molecules.")
     return df
 
 
