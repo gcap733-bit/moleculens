@@ -191,33 +191,92 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     ws5.freeze_panes = "A2"
     _autofit(ws5)
 
-    # ── Sheet 6: Correlation Matrix ───────────────────────
+    # ── Sheet 6: Correlation Matrix (Pearson + p-values + Spearman) ─
     ws6 = wb.create_sheet("Correlation")
     ws6.sheet_view.showGridLines = False
-    indices = list(corr.index)
-    props   = list(corr.columns)
-    ws6.cell(row=1, column=1, value="Index \ Property")
-    _style_header(ws6.cell(row=1, column=1))
+
+    # corr is now a dict with keys: pearson, pearson_p, spearman, spearman_p, significance, vif
+    pearson_dict = corr.get("pearson", {}) if isinstance(corr, dict) else {}
+    pearson_p_dict = corr.get("pearson_p", {}) if isinstance(corr, dict) else {}
+    spearman_dict = corr.get("spearman", {}) if isinstance(corr, dict) else {}
+    sig_dict = corr.get("significance", {}) if isinstance(corr, dict) else {}
+    vif_dict = corr.get("vif", {}) if isinstance(corr, dict) else {}
+
+    props   = list(list(pearson_dict.values())[0].keys()) if pearson_dict else []
+    indices_list = list(pearson_dict.keys()) if pearson_dict else []
+
+    # Section headers
+    ws6.cell(row=1, column=1, value="PEARSON CORRELATION")
+    ws6["A1"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
+    ws6.merge_cells(f"A1:{get_column_letter(len(props)+1)}1")
+
+    ws6.cell(row=2, column=1, value="Index \ Property")
+    _style_header(ws6.cell(row=2, column=1))
     for ci, p in enumerate(props, start=2):
-        _style_header(ws6.cell(row=1, column=ci, value=p))
-    for ri, idx in enumerate(indices, start=2):
+        _style_header(ws6.cell(row=2, column=ci, value=p))
+
+    for ri, idx in enumerate(indices_list, start=3):
         _style_subheader(ws6.cell(row=ri, column=1, value=idx))
         for ci, p in enumerate(props, start=2):
-            val = round(float(corr.loc[idx, p]), 3)
-            c = ws6.cell(row=ri, column=ci, value=val)
+            val = float(pearson_dict.get(idx, {}).get(p, 0))
+            pval = float(pearson_p_dict.get(idx, {}).get(p, 1))
+            sig  = sig_dict.get(idx, {}).get(p, "")
+            cell_val = f"{val:.3f} {sig}"
+            c = ws6.cell(row=ri, column=ci, value=cell_val)
             c.font = Font(name="Arial", size=10)
             c.alignment = Alignment(horizontal="center")
             c.border = _thin_border()
-            # Colour cells by correlation strength
             abs_val = abs(val)
             if val > 0:
                 intensity = int(abs_val * 180)
-                r, g, b = 255-intensity, 255, 255-intensity
+                r2, g2, b2 = 255-intensity, 255, 255-intensity
             else:
                 intensity = int(abs_val * 180)
-                r, g, b = 255, 255-intensity, 255-intensity
-            hex_color = f"{r:02X}{g:02X}{b:02X}"
-            c.fill = PatternFill("solid", start_color=hex_color)
+                r2, g2, b2 = 255, 255-intensity, 255-intensity
+            ws6.cell(row=ri, column=ci).fill = PatternFill("solid", start_color=f"{r2:02X}{g2:02X}{b2:02X}")
+
+    # Spearman section
+    spear_row = len(indices_list) + 5
+    ws6.cell(row=spear_row, column=1, value="SPEARMAN CORRELATION")
+    ws6[f"A{spear_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
+    ws6.cell(row=spear_row+1, column=1, value="Index \ Property")
+    _style_header(ws6.cell(row=spear_row+1, column=1))
+    for ci, p in enumerate(props, start=2):
+        _style_header(ws6.cell(row=spear_row+1, column=ci, value=p))
+    for ri2, idx in enumerate(indices_list, start=spear_row+2):
+        _style_subheader(ws6.cell(row=ri2, column=1, value=idx))
+        for ci, p in enumerate(props, start=2):
+            val = float(spearman_dict.get(idx, {}).get(p, 0))
+            c = ws6.cell(row=ri2, column=ci, value=round(val,3))
+            c.font = Font(name="Arial", size=10)
+            c.alignment = Alignment(horizontal="center")
+            c.border = _thin_border()
+
+    # VIF section
+    vif_row = spear_row + len(indices_list) + 4
+    ws6.cell(row=vif_row, column=1, value="VARIANCE INFLATION FACTOR (VIF) — Multicollinearity")
+    ws6[f"A{vif_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
+    ws6.cell(row=vif_row+1, column=1, value="Index")
+    ws6.cell(row=vif_row+1, column=2, value="VIF")
+    ws6.cell(row=vif_row+1, column=3, value="Interpretation")
+    for ci in [1,2,3]: _style_header(ws6.cell(row=vif_row+1, column=ci))
+    for ri3, (idx, vif_val) in enumerate(vif_dict.items(), start=vif_row+2):
+        ws6.cell(row=ri3, column=1, value=idx).font = Font(name="Arial", size=10)
+        ws6.cell(row=ri3, column=2, value=vif_val).font = Font(name="Arial", size=10)
+        if vif_val is None: interp = "N/A"
+        elif vif_val < 5:   interp = "Low multicollinearity"
+        elif vif_val < 10:  interp = "Moderate multicollinearity"
+        else:               interp = "High multicollinearity — consider removing"
+        ws6.cell(row=ri3, column=3, value=interp).font = Font(name="Arial", size=10)
+        if ri3 % 2 == 0:
+            for ci in [1,2,3]:
+                ws6.cell(row=ri3, column=ci).fill = PatternFill("solid", start_color="EBF3FB")
+
+    # Legend
+    leg_row = vif_row + len(vif_dict) + 3
+    ws6.cell(row=leg_row, column=1, value="Significance: *** p<0.001   ** p<0.01   * p<0.05   ns = not significant")
+    ws6[f"A{leg_row}"].font = Font(italic=True, name="Arial", size=9, color="666666")
+
     _autofit(ws6)
 
     # ── Sheet 7: Index Definitions ────────────────────────
@@ -271,7 +330,7 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
 
     df = apply_drug_filters(df)
     df = compute_topological_indices(df)
-    corr = run_correlation(df)
+    corr_data = run_correlation(df)
     ml_results, best_models = run_ml_qspr(df)
     shap_summaries = compute_shap(df, best_models)
 
@@ -289,7 +348,7 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
     export_excel(
         disease=disease,
         df=df,
-        corr=corr,
+        corr=corr_data,
         ml_results=ml_results,
         top_models=top_models,
         shap_summaries=shap_summaries,
@@ -306,7 +365,7 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         "disease":        disease,
         "drug_count":     len(df),
         "columns":        list(df.columns),
-        "correlation":    corr.round(3).to_dict(),
+        "correlation":    corr_data,
         "ml_results":     ml_results.to_dict(orient="records"),
         "top_models":     top_models.to_dict(orient="records"),
         "shap":           shap_summaries,
