@@ -242,11 +242,143 @@ def enrich_with_admet(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==========================================
+# UNICHEM — cross-reference SMILES to other DB IDs
+# UniChem is a free EBI service mapping between
+# chemical databases. We use it to find ChemSpider IDs
+# and ZINC IDs from InChIKey for cross-referencing.
+# ==========================================
+def _smiles_to_inchikey(smiles: str) -> str:
+    """Convert SMILES to InChIKey using RDKit."""
+    try:
+        from rdkit.Chem.inchi import MolToInchi, InchiToInchiKey
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return ""
+        inchi = MolToInchi(mol)
+        return InchiToInchiKey(inchi) if inchi else ""
+    except:
+        return ""
+
+
+def _fetch_unichem_ids(inchikey: str) -> dict:
+    """
+    Fetch cross-database IDs from UniChem (free EBI API).
+    Returns dict with ZINC ID, ChemSpider ID, DrugBank ID, etc.
+    UniChem is preferred for ID mapping because it covers 40+
+    chemical databases and is maintained by EMBL-EBI.
+    """
+    if not inchikey:
+        return {}
+    try:
+        url = f"https://www.ebi.ac.uk/unichem/api/v1/compounds?inchiKey={inchikey}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            return {}
+        data = resp.json()
+        sources = {}
+        src_map = {
+            "1":  "UC_ChEMBL_ID",
+            "2":  "UC_DrugBank_ID",
+            "12": "UC_ChemSpider_ID",
+            "9":  "UC_ZINC_ID",
+            "22": "UC_PubChem_SID",
+            "7":  "UC_ChEBI_ID",
+            "17": "UC_BindingDB_ID",
+            "38": "UC_SureChEMBL_ID",
+        }
+        for src in data.get("sources", []):
+            src_id = str(src.get("sourceId", ""))
+            if src_id in src_map:
+                sources[src_map[src_id]] = src.get("compoundId", "")
+        return sources
+    except:
+        return {}
+
+
+def enrich_with_unichem(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds cross-database IDs and InChIKey to every drug.
+    Enables linking to ChemSpider, ZINC, DrugBank, ChEBI.
+    """
+    print("[*] UniChem: fetching cross-database IDs...")
+    all_ids = []
+    for i, smiles in enumerate(df["SMILES"]):
+        cache_path = _cache_key("unichem", smiles)
+        cached = _load_cache(cache_path)
+        if cached:
+            all_ids.append(cached)
+        else:
+            inchikey = _smiles_to_inchikey(smiles)
+            ids = _fetch_unichem_ids(inchikey)
+            ids["InChIKey"] = inchikey
+            _save_cache(cache_path, ids)
+            all_ids.append(ids)
+            time.sleep(0.1)
+        if (i + 1) % 10 == 0:
+            print(f"    ... {i+1}/{len(df)} done")
+    unichem_df = pd.DataFrame(all_ids)
+    print(f"    [✓] UniChem IDs added ({len(unichem_df.columns)} columns).")
+    return pd.concat([df.reset_index(drop=True), unichem_df.reset_index(drop=True)], axis=1)
+
+
+# ==========================================
+# CHEMBL BIOACTIVITY — IC50, Ki, EC50 per drug
+# These are experimental activity values from ChEMBL
+# assays — more informative than just structural props.
+# ==========================================
+def fetch_chembl_bioactivity(chembl_ids: list) -> pd.DataFrame:
+    """
+    For each drug, fetches best available bioactivity value
+    (IC50, Ki, EC50, Kd) from ChEMBL assays.
+    Returns DataFrame indexed by ChEMBL_ID with activity columns.
+    """
+    print("[*] ChEMBL: fetching bioactivity data (IC50/Ki/EC50)...")
+    activity_api = new_client.activity
+    records = {}
+
+    for cid in chembl_ids:
+        cache_path = _cache_key("bioact", cid)
+        cached = _load_cache(cache_path)
+        if cached:
+            records[cid] = cached
+            continue
+        try:
+            acts = activity_api.filter(
+                molecule_chembl_id=cid,
+                standard_type__in=["IC50", "Ki", "EC50", "Kd"],
+            ).only(["standard_type", "standard_value", "standard_units", "assay_type"])
+            best = {"BIO_IC50": None, "BIO_Ki": None, "BIO_EC50": None, "BIO_Kd": None}
+            for a in acts:
+                key = f"BIO_{a.get('standard_type','')}"
+                val = a.get("standard_value")
+                if key in best and best[key] is None and val:
+                    try:
+                        best[key] = float(val)
+                    except:
+                        pass
+            _save_cache(cache_path, best)
+            records[cid] = best
+            time.sleep(0.1)
+        except:
+            records[cid] = {"BIO_IC50": None, "BIO_Ki": None, "BIO_EC50": None, "BIO_Kd": None}
+
+    bio_df = pd.DataFrame.from_dict(records, orient="index").reset_index()
+    bio_df.rename(columns={"index": "ChEMBL_ID"}, inplace=True)
+    print(f"    [✓] Bioactivity data fetched for {len(bio_df)} drugs.")
+    return bio_df
+
+
+# ==========================================
 # FULL FETCH PIPELINE
 # ==========================================
 def fetch_all(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
     """
-    Orchestrates all three data sources in order.
+    Orchestrates all data sources in order:
+    1. ChEMBL  — drug discovery + base RDKit properties
+    2. PubChem — 20 physicochemical properties
+    3. pkCSM   — ADMET pharmacokinetic properties
+    4. UniChem — cross-database IDs (ChemSpider, ZINC, DrugBank, ChEBI)
+    5. ChEMBL Bioactivity — IC50, Ki, EC50, Kd values
     Returns a single merged DataFrame ready for ML.
     """
     df = fetch_chembl_drugs(disease_name, max_drugs)
@@ -254,4 +386,11 @@ def fetch_all(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
         return df
     df = enrich_with_pubchem(df)
     df = enrich_with_admet(df)
+    df = enrich_with_unichem(df)
+
+    # Bioactivity — merge on ChEMBL_ID
+    if "ChEMBL_ID" in df.columns:
+        bio_df = fetch_chembl_bioactivity(df["ChEMBL_ID"].tolist())
+        df = df.merge(bio_df, on="ChEMBL_ID", how="left")
+
     return df
