@@ -11,11 +11,16 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
+from scipy import stats
+from scipy.stats import pearsonr, spearmanr
 from sklearn.model_selection import KFold, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+from sklearn.svm import SVR
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from xgboost import XGBRegressor
@@ -155,36 +160,123 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==========================================
-# ALGORITHM 2: Pearson Correlation
+# ALGORITHM 2: Pearson + Spearman Correlation with p-values
+#              + Multivariate (VIF)
 # ==========================================
-def run_correlation(df: pd.DataFrame) -> pd.DataFrame:
+def run_correlation(df: pd.DataFrame) -> dict:
     """
-    Pearson correlation matrix between topological indices
-    and physicochemical properties.
+    Extended correlation analysis:
+      1. Pearson r + two-tailed p-value + significance flag
+      2. Spearman rho + p-value (non-parametric, handles non-linearity)
+      3. Variance Inflation Factor (VIF) for multicollinearity among indices
+    Returns a dict with keys: 'pearson', 'spearman', 'pearson_p',
+    'spearman_p', 'significance', 'vif'
     """
-    print("[*] Computing Pearson correlation...")
+    print("[*] Computing extended correlation analysis...")
     available_targets = [t for t in ML_TARGETS if t in df.columns]
-    corr = df[TOPO_INDICES + available_targets].corr().loc[TOPO_INDICES, available_targets]
-    print("    [✓] Correlation matrix computed.")
-    return corr
+    data = df[TOPO_INDICES + available_targets].dropna()
+
+    pearson_r  = pd.DataFrame(index=TOPO_INDICES, columns=available_targets, dtype=float)
+    pearson_p  = pd.DataFrame(index=TOPO_INDICES, columns=available_targets, dtype=float)
+    spearman_r = pd.DataFrame(index=TOPO_INDICES, columns=available_targets, dtype=float)
+    spearman_p = pd.DataFrame(index=TOPO_INDICES, columns=available_targets, dtype=float)
+    sig_flags  = pd.DataFrame(index=TOPO_INDICES, columns=available_targets, dtype=str)
+
+    for idx in TOPO_INDICES:
+        for prop in available_targets:
+            x = data[idx].values
+            y = data[prop].values
+            pr, pp = pearsonr(x, y)
+            sr, sp = spearmanr(x, y)
+            pearson_r.loc[idx, prop]  = round(pr, 4)
+            pearson_p.loc[idx, prop]  = round(pp, 4)
+            spearman_r.loc[idx, prop] = round(float(sr), 4)
+            spearman_p.loc[idx, prop] = round(float(sp), 4)
+            # Significance: *** p<0.001, ** p<0.01, * p<0.05, ns
+            if pp < 0.001:   sig_flags.loc[idx, prop] = "***"
+            elif pp < 0.01:  sig_flags.loc[idx, prop] = "**"
+            elif pp < 0.05:  sig_flags.loc[idx, prop] = "*"
+            else:            sig_flags.loc[idx, prop] = "ns"
+
+    # Variance Inflation Factor — multicollinearity among topo indices
+    # VIF_i = 1 / (1 - R²_i) where R²_i from regressing index_i on all others
+    vif_data = data[TOPO_INDICES].copy()
+    vif_scores = {}
+    for i, col in enumerate(TOPO_INDICES):
+        others = [c for c in TOPO_INDICES if c != col]
+        if not others:
+            vif_scores[col] = 1.0
+            continue
+        X_oth = vif_data[others].values
+        y_col = vif_data[col].values
+        try:
+            from sklearn.linear_model import LinearRegression as LR
+            r2 = LR().fit(X_oth, y_col).score(X_oth, y_col)
+            vif_scores[col] = round(1 / (1 - r2) if r2 < 1 else float('inf'), 3)
+        except:
+            vif_scores[col] = None
+
+    print("    [✓] Pearson + Spearman + p-values + VIF computed.")
+    return {
+        "pearson":    pearson_r.round(4).to_dict(),
+        "pearson_p":  pearson_p.round(4).to_dict(),
+        "spearman":   spearman_r.round(4).to_dict(),
+        "spearman_p": spearman_p.round(4).to_dict(),
+        "significance": sig_flags.to_dict(),
+        "vif":        vif_scores,
+    }
 
 
 # ==========================================
 # ALGORITHM 3: ML with k-fold CV + hyperparameter tuning
 # ==========================================
 MODELS_AND_GRIDS = {
+    # Linear family
     "LinearReg": (
-        LinearRegression(),
-        {}
+        LinearRegression(), {}
     ),
+    "Ridge": (
+        Ridge(random_state=RANDOM_STATE),
+        {"model__alpha": [0.1, 1.0, 10.0]}
+    ),
+    "Lasso": (
+        Lasso(random_state=RANDOM_STATE, max_iter=2000),
+        {"model__alpha": [0.01, 0.1, 1.0]}
+    ),
+    "ElasticNet": (
+        ElasticNet(random_state=RANDOM_STATE, max_iter=2000),
+        {"model__alpha": [0.01, 0.1, 1.0], "model__l1_ratio": [0.3, 0.5, 0.7]}
+    ),
+    # Tree-based
     "RandomForest": (
         RandomForestRegressor(random_state=RANDOM_STATE),
         {"model__n_estimators": [100, 200], "model__max_depth": [None, 10, 20]}
+    ),
+    "ExtraTrees": (
+        ExtraTreesRegressor(random_state=RANDOM_STATE),
+        {"model__n_estimators": [100, 200], "model__max_depth": [None, 10]}
+    ),
+    "GradientBoosting": (
+        GradientBoostingRegressor(random_state=RANDOM_STATE),
+        {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1], "model__max_depth": [3, 5]}
     ),
     "XGBoost": (
         XGBRegressor(random_state=RANDOM_STATE, verbosity=0),
         {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1], "model__max_depth": [3, 6]}
     ),
+    # Kernel / probabilistic
+    "SVR": (
+        SVR(),
+        {"model__C": [0.1, 1.0, 10.0], "model__kernel": ["rbf", "linear"], "model__gamma": ["scale", "auto"]}
+    ),
+    "GaussianProcess": (
+        GaussianProcessRegressor(
+            kernel=Matern(nu=1.5) + WhiteKernel(),
+            random_state=RANDOM_STATE, normalize_y=True
+        ),
+        {}  # GP kernel params handled internally
+    ),
+    # Neural
     "NeuralNet": (
         MLPRegressor(max_iter=1000, random_state=RANDOM_STATE),
         {"model__hidden_layer_sizes": [(64, 32), (128, 64)], "model__alpha": [0.0001, 0.001]}
