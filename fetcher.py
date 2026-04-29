@@ -223,20 +223,32 @@ def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
 # from SMILES. No API key required.
 # ==========================================
 def _fetch_pkcms_single(smiles: str) -> dict:
-    url = "https://biosig.lab.uq.edu.au/pkcsm/api/v1/prediction"
-    resp = requests.post(
-        url,
-        json={"smiles": smiles},
-        headers={"Content-Type": "application/json"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    result = resp.json()
-    return {
-        f"ADMET_{k}": v
-        for k, v in result.items()
-        if k.lower() != "smiles"
-    }
+    """
+    pkCSM moved to biosig.unimelb.edu.au in 2024.
+    New endpoint uses form-data POST, not JSON.
+    Tries new URL first, falls back to old URL.
+    """
+    urls = [
+        "https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction",
+        "https://biosig.lab.uq.edu.au/pkcsm/api/v1/prediction",
+    ]
+    for url in urls:
+        try:
+            resp = requests.post(
+                url,
+                data={"smiles": smiles},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                return {
+                    f"ADMET_{k}": v
+                    for k, v in result.items()
+                    if k.lower() != "smiles"
+                }
+        except Exception:
+            continue
+    return {}
 
 
 def _fetch_admet_cached(args):
