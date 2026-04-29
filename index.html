@@ -504,6 +504,14 @@ function renderResults(data, jobId) {
     sel.id = 'shap-select';
     props.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
     sel.onchange = () => renderShap(sel.value);
+    // Add index family info below SHAP
+    const indexFamilies = {
+      'Original (9)':      ['M1','M2','ABC','R','H','F','AZI','GA','SC'],
+      'New degree-based (11)': ['BM','TM','GH','GBM','GTM','HG','BMG','BMH','TMG','TMH','SDD'],
+      'Reverse-degree (9)':['RM1','RM2','RABC','RR','RH','RF','RGA','RBM','RSDD'],
+      'Degree-sum (5)':    ['DS1','DS2','DSR','DSH','DSGA'],
+      'Distance-based (5)':['W','J','Z','Sz','GE'],
+    };
     const shapGrid = document.createElement('div');
     shapGrid.className = 'shap-grid';
     shapGrid.id = 'shap-grid';
