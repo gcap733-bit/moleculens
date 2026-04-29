@@ -579,25 +579,74 @@ function renderShap(prop) {
 
 // ── HEATMAP ──
 function renderHeatmap(corr, sec) {
-  const indices = Object.keys(corr);
-  const props   = Object.keys(corr[indices[0]] || {});
+  // corr is now a dict: {pearson, pearson_p, spearman, spearman_p, significance, vif}
+  const isPearsonObj = corr && typeof corr === 'object' && corr.pearson;
+  const pearsonData = isPearsonObj ? corr.pearson : corr;
+  const sigData     = isPearsonObj ? corr.significance : null;
+  const spearData   = isPearsonObj ? corr.spearman : null;
+  const vifData     = isPearsonObj ? corr.vif : null;
+
+  const indices = Object.keys(pearsonData || {});
+  const props   = Object.keys((pearsonData[indices[0]]) || {});
   if (!indices.length || !props.length) return;
+
   function clr(v) {
     const a = Math.abs(v);
     return v >= 0
       ? `rgba(74,${Math.round(160+a*80)},${Math.round(130+a*50)},${0.15+a*0.55})`
       : `rgba(240,${Math.round(100+a*40)},96,${0.15+a*0.55})`;
   }
+
+  // Pearson heatmap with significance
   const wrap = document.createElement('div');
   wrap.className = 'heatmap-wrap fade-in';
-  wrap.innerHTML = `<table class="heatmap-table">
-    <thead><tr><th></th>${props.map(p=>`<th>${p}</th>`).join('')}</tr></thead>
-    <tbody>${indices.map(idx =>
-      `<tr><th class="row-label">${idx}</th>${props.map(p => {
-        const v = corr[idx]?.[p] ?? 0;
+
+  const tabHead = `<tr><th style="text-align:left;padding-right:12px">Index</th>${props.map(p=>`<th>${p}</th>`).join('')}</tr>`;
+  const tabBody = indices.map(idx => {
+    const cells = props.map(p => {
+      const v   = parseFloat(pearsonData[idx]?.[p] ?? 0);
+      const sig = sigData ? (sigData[idx]?.[p] ?? '') : '';
+      return `<td style="background:${clr(v)}" title="r=${v.toFixed(3)} ${sig}">${v.toFixed(2)}<sup style="font-size:9px">${sig}</sup></td>`;
+    }).join('');
+    return `<tr><th class="row-label">${idx}</th>${cells}</tr>`;
+  }).join('');
+
+  let html = `<div style="margin-bottom:6px;font-size:11px;color:var(--muted)">
+    Pearson r — significance: <strong style="color:var(--text)">***</strong> p&lt;0.001 &nbsp;
+    <strong style="color:var(--text)">**</strong> p&lt;0.01 &nbsp;
+    <strong style="color:var(--text)">*</strong> p&lt;0.05 &nbsp; ns = not significant
+  </div>
+  <table class="heatmap-table"><thead>${tabHead}</thead><tbody>${tabBody}</tbody></table>`;
+
+  // Spearman section
+  if (spearData) {
+    const spearBody = indices.map(idx => {
+      const cells = props.map(p => {
+        const v = parseFloat(spearData[idx]?.[p] ?? 0);
         return `<td style="background:${clr(v)}">${v.toFixed(2)}</td>`;
-      }).join('')}</tr>`
-    ).join('')}</tbody></table>`;
+      }).join('');
+      return `<tr><th class="row-label">${idx}</th>${cells}</tr>`;
+    }).join('');
+    html += `<div style="margin:20px 0 6px;font-size:11px;color:var(--muted);font-weight:500">Spearman ρ (non-parametric)</div>
+    <table class="heatmap-table"><thead>${tabHead}</thead><tbody>${spearBody}</tbody></table>`;
+  }
+
+  // VIF table
+  if (vifData && Object.keys(vifData).length) {
+    const vifRows = Object.entries(vifData).map(([idx, val]) => {
+      const v = val === null ? 'N/A' : parseFloat(val).toFixed(2);
+      const flag = val === null ? '' : val < 5 ? '✅ Low' : val < 10 ? '⚠️ Moderate' : '❌ High';
+      return `<tr><td>${idx}</td><td>${v}</td><td style="color:var(--muted)">${flag}</td></tr>`;
+    }).join('');
+    html += `<div style="margin:20px 0 6px;font-size:11px;color:var(--muted);font-weight:500">Variance Inflation Factor (VIF) — Multicollinearity</div>
+    <table class="heatmap-table" style="text-align:left">
+      <thead><tr><th>Index</th><th>VIF</th><th>Interpretation</th></tr></thead>
+      <tbody>${vifRows}</tbody>
+    </table>
+    <div style="margin-top:6px;font-size:10px;color:var(--muted)">VIF &lt; 5: low multicollinearity &nbsp; 5-10: moderate &nbsp; &gt;10: high (consider removing)</div>`;
+  }
+
+  wrap.innerHTML = html;
   sec.appendChild(wrap);
 }
 </script>
