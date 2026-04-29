@@ -88,6 +88,24 @@ def run_endpoint(body: RunRequest, background_tasks: BackgroundTasks):
 def _run_job(job_id: str, disease: str, max_drugs: int):
     JOBS[job_id]["status"] = "running"
     try:
+        import json
+        from config import OUTPUT_DIR
+        results_cache = os.path.join(OUTPUT_DIR, f"{disease}_results_cache.json")
+
+        # Check if we have a cached result for this exact disease
+        if os.path.exists(results_cache):
+            print(f"[cache] Loading results from disk for '{disease}'...")
+            with open(results_cache) as f:
+                results = json.load(f)
+            # Verify CSV and XLSX still exist on disk
+            csv_ok  = os.path.exists(results.get("csv_path", ""))
+            xlsx_ok = os.path.exists(results.get("xlsx_path", ""))
+            if csv_ok and xlsx_ok:
+                JOBS[job_id]["status"]  = "complete"
+                JOBS[job_id]["results"] = results
+                print(f"[cache] Returned cached results instantly for '{disease}'.")
+                return
+
         results = run_pipeline(disease, max_drugs)
         if "error" in results:
             JOBS[job_id]["status"] = "failed"
