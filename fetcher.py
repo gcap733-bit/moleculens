@@ -10,6 +10,7 @@ import json
 import hashlib
 import requests
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 from chembl_webresource_client.new_client import new_client
@@ -177,23 +178,41 @@ def _fetch_pubchem_single(smiles: str) -> dict:
     }
 
 
-def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
-    print("[*] PubChem: fetching physicochemical properties...")
-    all_props = []
-    for i, smiles in enumerate(df["SMILES"]):
-        cache_path = _cache_key("pubchem", smiles)
-        cached = _load_cache(cache_path)
-        if cached:
-            all_props.append(cached)
-        else:
-            props = _with_retry(_fetch_pubchem_single, smiles) or {}
-            _save_cache(cache_path, props)
-            all_props.append(props)
-            time.sleep(PUBCHEM_DELAY)
-        if (i + 1) % 10 == 0:
-            print(f"    ... {i+1}/{len(df)} done")
+def _fetch_pubchem_cached(args):
+    """Worker for parallel PubChem fetching. Returns (index, props)."""
+    i, smiles = args
+    cache_path = _cache_key("pubchem", smiles)
+    cached = _load_cache(cache_path)
+    if cached:
+        return i, cached
+    props = _with_retry(_fetch_pubchem_single, smiles) or {}
+    _save_cache(cache_path, props)
+    time.sleep(PUBCHEM_DELAY)  # Respect rate limit per worker
+    return i, props
 
-    pubchem_df = pd.DataFrame(all_props)
+
+def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fetches PubChem properties in parallel using ThreadPoolExecutor.
+    Uses 5 workers — stays safely within PubChem's 5 req/sec free limit.
+    Results are re-ordered to match original df order.
+    """
+    print("[*] PubChem: fetching physicochemical properties (parallel, 5 workers)...")
+    smiles_list = list(df["SMILES"])
+    results = [None] * len(smiles_list)
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_fetch_pubchem_cached, (i, s)): i
+                   for i, s in enumerate(smiles_list)}
+        for future in as_completed(futures):
+            i, props = future.result()
+            results[i] = props
+            completed += 1
+            if completed % 10 == 0:
+                print(f"    ... {completed}/{len(smiles_list)} done")
+
+    pubchem_df = pd.DataFrame(results)
     print(f"    [✓] PubChem properties added ({len(pubchem_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), pubchem_df.reset_index(drop=True)], axis=1)
 
@@ -220,23 +239,41 @@ def _fetch_pkcms_single(smiles: str) -> dict:
     }
 
 
-def enrich_with_admet(df: pd.DataFrame) -> pd.DataFrame:
-    print("[*] pkCSM: fetching ADMET properties...")
-    all_admet = []
-    for i, smiles in enumerate(df["SMILES"]):
-        cache_path = _cache_key("pkcms", smiles)
-        cached = _load_cache(cache_path)
-        if cached:
-            all_admet.append(cached)
-        else:
-            props = _with_retry(_fetch_pkcms_single, smiles) or {}
-            _save_cache(cache_path, props)
-            all_admet.append(props)
-            time.sleep(PKCMS_DELAY)
-        if (i + 1) % 10 == 0:
-            print(f"    ... {i+1}/{len(df)} done")
+def _fetch_admet_cached(args):
+    """Worker for parallel pkCSM fetching. Returns (index, props)."""
+    i, smiles = args
+    cache_path = _cache_key("pkcms", smiles)
+    cached = _load_cache(cache_path)
+    if cached:
+        return i, cached
+    props = _with_retry(_fetch_pkcms_single, smiles) or {}
+    _save_cache(cache_path, props)
+    time.sleep(PKCMS_DELAY)  # pkCSM is a free server — be respectful
+    return i, props
 
-    admet_df = pd.DataFrame(all_admet)
+
+def enrich_with_admet(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fetches ADMET properties in parallel using ThreadPoolExecutor.
+    Uses 3 workers — pkCSM is a free academic server so we stay conservative.
+    Same data, same results — just faster.
+    """
+    print("[*] pkCSM: fetching ADMET properties (parallel, 3 workers)...")
+    smiles_list = list(df["SMILES"])
+    results = [None] * len(smiles_list)
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(_fetch_admet_cached, (i, s)): i
+                   for i, s in enumerate(smiles_list)}
+        for future in as_completed(futures):
+            i, props = future.result()
+            results[i] = props
+            completed += 1
+            if completed % 10 == 0:
+                print(f"    ... {completed}/{len(smiles_list)} done")
+
+    admet_df = pd.DataFrame(results)
     print(f"    [✓] ADMET properties added ({len(admet_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), admet_df.reset_index(drop=True)], axis=1)
 
@@ -295,28 +332,42 @@ def _fetch_unichem_ids(inchikey: str) -> dict:
         return {}
 
 
+def _fetch_unichem_cached(args):
+    """Worker for parallel UniChem fetching. Returns (index, ids_dict)."""
+    i, smiles = args
+    cache_path = _cache_key("unichem", smiles)
+    cached = _load_cache(cache_path)
+    if cached:
+        return i, cached
+    inchikey = _smiles_to_inchikey(smiles)
+    ids = _fetch_unichem_ids(inchikey)
+    ids["InChIKey"] = inchikey
+    _save_cache(cache_path, ids)
+    time.sleep(0.1)
+    return i, ids
+
+
 def enrich_with_unichem(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Adds cross-database IDs and InChIKey to every drug.
-    Enables linking to ChemSpider, ZINC, DrugBank, ChEBI.
+    Adds cross-database IDs and InChIKey to every drug in parallel.
+    Uses 8 workers — UniChem is a robust EBI API that handles concurrency well.
     """
-    print("[*] UniChem: fetching cross-database IDs...")
-    all_ids = []
-    for i, smiles in enumerate(df["SMILES"]):
-        cache_path = _cache_key("unichem", smiles)
-        cached = _load_cache(cache_path)
-        if cached:
-            all_ids.append(cached)
-        else:
-            inchikey = _smiles_to_inchikey(smiles)
-            ids = _fetch_unichem_ids(inchikey)
-            ids["InChIKey"] = inchikey
-            _save_cache(cache_path, ids)
-            all_ids.append(ids)
-            time.sleep(0.1)
-        if (i + 1) % 10 == 0:
-            print(f"    ... {i+1}/{len(df)} done")
-    unichem_df = pd.DataFrame(all_ids)
+    print("[*] UniChem: fetching cross-database IDs (parallel, 8 workers)...")
+    smiles_list = list(df["SMILES"])
+    results = [None] * len(smiles_list)
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_fetch_unichem_cached, (i, s)): i
+                   for i, s in enumerate(smiles_list)}
+        for future in as_completed(futures):
+            i, ids = future.result()
+            results[i] = ids
+            completed += 1
+            if completed % 10 == 0:
+                print(f"    ... {completed}/{len(smiles_list)} done")
+
+    unichem_df = pd.DataFrame(results)
     print(f"    [✓] UniChem IDs added ({len(unichem_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), unichem_df.reset_index(drop=True)], axis=1)
 
