@@ -13,7 +13,7 @@ from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
 from scipy import stats
 from scipy.stats import pearsonr, spearmanr
-from sklearn.model_selection import KFold, GridSearchCV, cross_val_score
+from sklearn.model_selection import KFold, GridSearchCV, RandomizedSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
