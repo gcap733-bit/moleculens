@@ -414,7 +414,16 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
 
     # Cache full results so repeat searches return instantly
     try:
-        import json
+        import json, math
+
+        def _clean(obj):
+            if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                return None
+            if isinstance(obj, dict): return {k: _clean(v) for k,v in obj.items()}
+            if isinstance(obj, list): return [_clean(v) for v in obj]
+            return obj
+
+        result = _clean(result)
         with open(results_cache, "w") as f:
             json.dump(result, f, default=str)
         print(f"    Results cached → {results_cache}")
