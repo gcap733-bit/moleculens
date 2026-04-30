@@ -96,7 +96,13 @@ def _run_job(job_id: str, disease: str, max_drugs: int):
         if os.path.exists(results_cache):
             print(f"[cache] Loading results from disk for '{disease}'...")
             with open(results_cache) as f:
-                results = json.load(f)
+                raw = f.read()
+            # Replace inf/-inf/nan that may be stored as bare values
+            import re as _re
+            raw = _re.sub(r':\s*Infinity', ': null', raw)
+            raw = _re.sub(r':\s*-Infinity', ': null', raw)
+            raw = _re.sub(r':\s*NaN', ': null', raw)
+            results = json.loads(raw)
             # Verify CSV and XLSX still exist on disk
             csv_ok  = os.path.exists(results.get("csv_path", ""))
             xlsx_ok = os.path.exists(results.get("xlsx_path", ""))
@@ -126,6 +132,24 @@ def status_endpoint(job_id: str):
     return {"job_id": job_id, "disease": job["disease"], "status": job["status"], "error": job["error"]}
 
 
+def _sanitize_for_json(obj):
+    """
+    Recursively replace inf, -inf, nan with None so JSON serialization
+    never crashes. These come from topological index calculations on
+    molecules with unusual structures (e.g. disconnected fragments).
+    """
+    import math
+    if isinstance(obj, float):
+        if math.isinf(obj) or math.isnan(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+
 @app.get("/results/{job_id}")
 def results_endpoint(job_id: str):
     job = JOBS.get(job_id)
@@ -133,7 +157,7 @@ def results_endpoint(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found.")
     if job["status"] != "complete":
         raise HTTPException(status_code=202, detail=f"Job status: {job['status']}")
-    return job["results"]
+    return JSONResponse(content=_sanitize_for_json(job["results"]))
 
 
 @app.get("/download/{job_id}")
