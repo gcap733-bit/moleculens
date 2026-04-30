@@ -237,7 +237,17 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 results[k].append(np.nan)
 
     for k, vals in results.items():
-        df[k] = vals
+        # Replace inf/-inf with nan so dropna removes them cleanly
+        clean = []
+        for v in vals:
+            try:
+                if v != v or abs(v) == float('inf'):  # nan or inf check
+                    clean.append(float('nan'))
+                else:
+                    clean.append(v)
+            except:
+                clean.append(float('nan'))
+        df[k] = clean
     df.dropna(subset=all_keys, inplace=True)
     df.reset_index(drop=True, inplace=True)
     print(f"    [✓] 34 topological indices computed for {len(df)} molecules.")
