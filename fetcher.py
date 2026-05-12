@@ -224,31 +224,87 @@ def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
 # ==========================================
 def _fetch_pkcms_single(smiles: str) -> dict:
     """
-    pkCSM moved to biosig.unimelb.edu.au in 2024.
-    New endpoint uses form-data POST, not JSON.
-    Tries new URL first, falls back to old URL.
+    pkCSM ADMET prediction — tries multiple endpoints and request formats.
+    pkCSM has historically changed URLs and accepted formats.
+    We try every known combination so at least one works.
+    Strategies:
+      1. biosig.unimelb.edu.au — form-data POST
+      2. biosig.unimelb.edu.au — JSON POST
+      3. biosig.lab.uq.edu.au  — form-data POST (old URL)
+      4. biosig.lab.uq.edu.au  — JSON POST (old URL)
+    If all fail, compute RDKit-based ADMET approximations as fallback.
     """
-    urls = [
-        "https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction",
-        "https://biosig.lab.uq.edu.au/pkcsm/api/v1/prediction",
+    endpoints = [
+        ("https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction", "form"),
+        ("https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction", "json"),
+        ("https://biosig.lab.uq.edu.au/pkcsm/api/v1/prediction",  "form"),
+        ("https://biosig.lab.uq.edu.au/pkcsm/api/v1/prediction",  "json"),
     ]
-    for url in urls:
+    for url, fmt in endpoints:
         try:
-            resp = requests.post(
-                url,
-                data={"smiles": smiles},
-                timeout=30,
-            )
+            if fmt == "form":
+                resp = requests.post(url, data={"smiles": smiles}, timeout=30)
+            else:
+                resp = requests.post(
+                    url,
+                    json={"smiles": smiles},
+                    headers={"Content-Type": "application/json"},
+                    timeout=30,
+                )
             if resp.status_code == 200:
-                result = resp.json()
-                return {
-                    f"ADMET_{k}": v
-                    for k, v in result.items()
-                    if k.lower() != "smiles"
-                }
+                try:
+                    result = resp.json()
+                    if isinstance(result, dict) and len(result) > 1:
+                        return {
+                            f"ADMET_{k}": v
+                            for k, v in result.items()
+                            if k.lower() not in ("smiles", "error")
+                        }
+                except Exception:
+                    continue
         except Exception:
             continue
-    return {}
+
+    # ── Fallback: RDKit-based ADMET approximations ─────────────────────
+    # When pkCSM is unavailable, compute key ADMET properties locally
+    # using well-established RDKit descriptors and Lipinski-based rules.
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors, rdMolDescriptors
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return {}
+        mw   = Descriptors.MolWt(mol)
+        logp = Descriptors.MolLogP(mol)
+        tpsa = Descriptors.TPSA(mol)
+        hbd  = rdMolDescriptors.CalcNumHBD(mol)
+        hba  = rdMolDescriptors.CalcNumHBA(mol)
+        rot  = rdMolDescriptors.CalcNumRotatableBonds(mol)
+        rings = rdMolDescriptors.CalcNumRings(mol)
+        arom  = rdMolDescriptors.CalcNumAromaticRings(mol)
+
+        # Absorption approximations (rule-based)
+        gi_absorption = "High" if (mw < 500 and logp < 5 and hbd <= 5 and hba <= 10) else "Low"
+        bbb_permeant  = "Yes"  if (mw < 400 and logp > 0 and tpsa < 90) else "No"
+        caco2         = round(0.5 - 0.01 * tpsa + 0.02 * logp, 3)  # rough estimate
+
+        return {
+            "ADMET_GI_Absorption":    gi_absorption,
+            "ADMET_BBB_Permeant":     bbb_permeant,
+            "ADMET_Caco2_approx":     caco2,
+            "ADMET_MW":               round(mw, 3),
+            "ADMET_LogP":             round(logp, 3),
+            "ADMET_TPSA":             round(tpsa, 3),
+            "ADMET_HBD":              hbd,
+            "ADMET_HBA":              hba,
+            "ADMET_RotBonds":         rot,
+            "ADMET_NumRings":         rings,
+            "ADMET_NumAromaticRings": arom,
+            "ADMET_Lipinski_Pass":    int(mw<=500 and logp<=5 and hbd<=5 and hba<=10),
+            "ADMET_Source":           "RDKit_fallback",
+        }
+    except Exception:
+        return {}
 
 
 def _fetch_admet_cached(args):
@@ -311,37 +367,89 @@ def _smiles_to_inchikey(smiles: str) -> str:
 
 def _fetch_unichem_ids(inchikey: str) -> dict:
     """
-    Fetch cross-database IDs from UniChem (free EBI API).
-    Returns dict with ZINC ID, ChemSpider ID, DrugBank ID, etc.
-    UniChem is preferred for ID mapping because it covers 40+
-    chemical databases and is maintained by EMBL-EBI.
+    Fetch cross-database IDs from UniChem using multiple API strategies.
+    UniChem has changed its API structure over time — we try v2, v1, and
+    a PubChem-based fallback to ensure we always get cross-DB IDs.
+
+    Strategy 1: UniChem v2 REST API (current)
+    Strategy 2: UniChem v1 REST API (legacy fallback)
+    Strategy 3: PubChem PUG REST — get CID, SID, synonyms from InChIKey
     """
     if not inchikey:
         return {}
+
+    src_map = {
+        "1":  "UC_ChEMBL_ID",
+        "2":  "UC_DrugBank_ID",
+        "12": "UC_ChemSpider_ID",
+        "9":  "UC_ZINC_ID",
+        "22": "UC_PubChem_SID",
+        "7":  "UC_ChEBI_ID",
+        "17": "UC_BindingDB_ID",
+        "38": "UC_SureChEMBL_ID",
+        "14": "UC_FDA_SRS_ID",
+        "41": "UC_Comptox_ID",
+    }
+
+    # Strategy 1: UniChem v2
     try:
         url = f"https://www.ebi.ac.uk/unichem/api/v1/compounds?inchiKey={inchikey}"
         resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            return {}
-        data = resp.json()
-        sources = {}
-        src_map = {
-            "1":  "UC_ChEMBL_ID",
-            "2":  "UC_DrugBank_ID",
-            "12": "UC_ChemSpider_ID",
-            "9":  "UC_ZINC_ID",
-            "22": "UC_PubChem_SID",
-            "7":  "UC_ChEBI_ID",
-            "17": "UC_BindingDB_ID",
-            "38": "UC_SureChEMBL_ID",
-        }
-        for src in data.get("sources", []):
-            src_id = str(src.get("sourceId", ""))
-            if src_id in src_map:
-                sources[src_map[src_id]] = src.get("compoundId", "")
-        return sources
-    except:
-        return {}
+        if resp.status_code == 200:
+            data = resp.json()
+            sources = {}
+            # v2 response: {"compounds": [{"sources": [...]}]}
+            compounds = data.get("compounds", [data]) if "compounds" in data else [data]
+            for compound in compounds:
+                for src in compound.get("sources", []):
+                    src_id = str(src.get("sourceId", src.get("src_id", "")))
+                    cmp_id = src.get("compoundId", src.get("src_compound_id", ""))
+                    if src_id in src_map and cmp_id:
+                        sources[src_map[src_id]] = cmp_id
+            if sources:
+                return sources
+    except Exception:
+        pass
+
+    # Strategy 2: UniChem v1 legacy
+    try:
+        url2 = f"https://www.ebi.ac.uk/unichem/rest/inchikey/{inchikey}"
+        resp2 = requests.get(url2, timeout=10)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            sources2 = {}
+            for item in data2:
+                src_id = str(item.get("src_id", ""))
+                cmp_id = item.get("src_compound_id", "")
+                if src_id in src_map and cmp_id:
+                    sources2[src_map[src_id]] = cmp_id
+            if sources2:
+                return sources2
+    except Exception:
+        pass
+
+    # Strategy 3: PubChem fallback — get CID and synonyms from InChIKey
+    try:
+        pc_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchikey}/property/IUPACName/JSON"
+        pc_resp = requests.get(pc_url, timeout=10)
+        if pc_resp.status_code == 200:
+            pc_data = pc_resp.json()
+            props = pc_data.get("PropertyTable", {}).get("Properties", [{}])[0]
+            cid = props.get("CID", "")
+            result = {}
+            if cid:
+                result["UC_PubChem_CID_from_IK"] = str(cid)
+                # Also try to get SID from PubChem
+                sid_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/sids/JSON"
+                sid_resp = requests.get(sid_url, timeout=10)
+                if sid_resp.status_code == 200:
+                    sids = sid_resp.json().get("InformationList", {}).get("Information", [{}])[0].get("SID", [])
+                    result["UC_PubChem_SID"] = str(sids[0]) if sids else ""
+            return result
+    except Exception:
+        pass
+
+    return {}
 
 
 def _fetch_unichem_cached(args):
