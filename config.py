@@ -78,5 +78,15 @@ TOPO_INDICES = [
     "GE",   # Graph entropy (Shannon)
 ]
 
-# --- ML targets (ChEMBL-derived properties) ---
-ML_TARGETS = ["MolWt", "LogP", "TPSA", "HBD", "HBA", "RotBonds", "MolMR"]
+# --- ML targets — all predictable numerical properties ---
+ML_TARGETS = [
+    # RDKit-computed (original 7)
+    "MolWt", "LogP", "TPSA", "HBD", "HBA", "RotBonds", "MolMR",
+    # PubChem physicochemical (13 numerical)
+    "PC_MolecularWeight", "PC_XLogP", "PC_ExactMass", "PC_MonoisotopicMass",
+    "PC_TPSA", "PC_Complexity", "PC_FormalCharge", "PC_HBD", "PC_HBA",
+    "PC_RotatableBonds", "PC_HeavyAtomCount", "PC_AtomStereoCount",
+    "PC_CovalentUnitCount",
+    # Bioactivity (4) — only used if data available
+    "BIO_IC50", "BIO_Ki", "BIO_EC50", "BIO_Kd",
+]
