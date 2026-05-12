@@ -5,657 +5,883 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>MolecuLens — Drug QSPR Pipeline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0c0f;--surface:#111418;--surface2:#181c22;
-  --border:#232830;--border2:#2e3540;--text:#e8eaed;--muted:#7a8494;
-  --accent:#4af0b0;--accent2:#1de9b6;--warn:#f0c44a;--danger:#f06060;
-  --mono:'DM Mono',monospace;--serif:'Fraunces',Georgia,serif;
+  --bg:#080a0d; --bg1:#0d1117; --bg2:#13181f; --bg3:#1a2130;
+  --border:#1e2a3a; --border2:#253347;
+  --text:#dde4ed; --text2:#8fa3bd; --text3:#4a6080;
+  --accent:#00e5a0; --accent2:#00c88a;
+  --blue:#3d9bff; --yellow:#f5c842; --red:#ff5c5c; --purple:#a78bfa;
+  --mono:'IBM Plex Mono',monospace; --serif:'Cormorant Garamond',Georgia,serif;
+  --r:6px;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:999;opacity:.4}
-body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:40px 40px;opacity:.3;pointer-events:none;z-index:0}
-.page{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:0 24px 80px}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:.5}
 
-header{padding:48px 0 40px;border-bottom:1px solid var(--border)}
-.logo{font-family:var(--serif);font-size:38px;font-weight:300;letter-spacing:-1px;line-height:1}
-.logo em{font-style:italic;color:var(--accent)}
-.tagline{margin-top:10px;font-size:12px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+/* NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(8,10,13,.93);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:52px}
+.nav-logo{font-family:var(--serif);font-size:21px;font-weight:300;color:var(--text);cursor:pointer;letter-spacing:-.3px;user-select:none}
+.nav-logo em{font-style:italic;color:var(--accent)}
+.nav-links{display:flex;gap:2px}
+.nav-btn{background:none;border:none;font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:6px 14px;border-radius:var(--r);transition:color .15s,background .15s}
+.nav-btn:hover{color:var(--text);background:var(--bg2)}
+.nav-btn.on{color:var(--accent);background:rgba(0,229,160,.06)}
 
-.backend-banner{display:none;margin-top:16px;padding:10px 14px;border-radius:4px;border-left:3px solid var(--danger);background:rgba(240,96,96,.06);font-size:12px;color:#f09090;line-height:1.7}
-.backend-banner.show{display:block}
-.backend-banner code{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;font-family:var(--mono)}
+/* PAGE SYSTEM */
+.pg{display:none;min-height:calc(100vh - 52px);animation:fadeUp .3s ease}
+.pg.on{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.wrap{max-width:980px;margin:0 auto;padding:40px 32px 80px}
 
-.search-section{padding:48px 0 0}
-.search-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
-.search-row{display:flex;gap:10px;align-items:stretch}
-#disease-input{
-  flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:4px;
-  padding:14px 18px;font-family:var(--mono);font-size:16px;color:var(--text);
-  outline:none;transition:border-color .2s,box-shadow .2s;
-}
-#disease-input::placeholder{color:var(--muted)}
-#disease-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,240,176,.08)}
-#disease-input:disabled{opacity:.45;cursor:not-allowed}
-#disease-input.error{border-color:var(--danger)}
-#disease-input.warn{border-color:var(--warn)}
-.run-btn{
-  background:var(--accent);color:#0a0c0f;border:none;border-radius:4px;
-  padding:14px 28px;font-family:var(--mono);font-size:14px;font-weight:500;
-  cursor:pointer;white-space:nowrap;letter-spacing:.04em;transition:background .15s,transform .1s;
-}
-.run-btn:hover{background:var(--accent2)}
-.run-btn:active{transform:scale(.97)}
-.run-btn:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;transform:none}
-.msg{margin-top:12px;font-size:12px;padding:10px 14px;border-radius:4px;border-left:3px solid;display:none}
-.msg.show{display:block}
-.msg.error{border-color:var(--danger);background:rgba(240,96,96,.06);color:#f09090}
-.msg.warn{border-color:var(--warn);background:rgba(240,196,74,.06);color:#f0d080}
-.msg.info{border-color:var(--accent);background:rgba(74,240,176,.06);color:var(--accent)}
-.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.pill{background:var(--surface2);border:1px solid var(--border2);border-radius:3px;padding:5px 12px;font-size:12px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s;font-family:var(--mono)}
-.pill:hover{border-color:var(--accent);color:var(--accent)}
+/* TYPOGRAPHY */
+.eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.display{font-family:var(--serif);font-size:42px;font-weight:300;letter-spacing:-1.2px;line-height:1.1;color:var(--text)}
+.display em{font-style:italic;color:var(--accent)}
+.lead{font-size:14px;color:var(--text2);line-height:1.8;max-width:620px;margin-top:12px}
+.sh{display:flex;align-items:center;gap:12px;margin:36px 0 18px}
+.sh h2{font-family:var(--serif);font-size:22px;font-weight:300;letter-spacing:-.5px;white-space:nowrap}
+.sh h2 em{font-style:italic;color:var(--accent)}
+.sh-line{flex:1;height:1px;background:linear-gradient(to right,var(--border2),transparent)}
+.slabel{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;margin-top:20px}
 
-#progress-section{display:none;padding-top:48px}
-.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.progress-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.progress-status{font-size:12px;color:var(--muted)}
-.progress-track{height:2px;background:var(--border2);border-radius:1px;overflow:hidden}
-.progress-bar{height:100%;background:var(--accent);border-radius:1px;width:40%;animation:slide 1.4s ease-in-out infinite}
-.progress-bar.done{animation:none;width:100%;transition:width .4s}
-@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
-.progress-steps{margin-top:20px;display:flex;flex-direction:column;gap:8px}
-.step{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);opacity:.35;transition:opacity .3s,color .3s}
-.step.active{opacity:1;color:var(--text)}
-.step.done{opacity:.7;color:var(--accent)}
-.step-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
-.step.active .step-dot{animation:pulse 1s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+/* CARDS */
+.cgrid{display:grid;gap:12px;margin-bottom:28px}
+.c2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.c3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.c4{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
+.clabel{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.cval{font-family:var(--serif);font-size:30px;font-weight:300;line-height:1}
+.cval.ac{color:var(--accent)} .cval.bl{color:var(--blue)} .cval.yl{color:var(--yellow)}
+.csub{font-size:11px;color:var(--text3);margin-top:4px}
+.cbody{font-size:12px;color:var(--text2);line-height:1.75}
+.ctitle{font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px}
 
-#results-section{display:none;padding-top:56px}
-.results-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:36px;padding-bottom:20px;border-bottom:1px solid var(--border)}
-.results-title{font-family:var(--serif);font-size:28px;font-weight:300;line-height:1.2}
-.results-title em{font-style:italic;color:var(--accent)}
-.results-meta{font-size:11px;color:var(--muted);text-align:right;line-height:1.9}
-.download-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--accent);border-radius:4px;color:var(--accent);padding:9px 18px;font-family:var(--mono);font-size:12px;cursor:pointer;text-decoration:none;transition:background .15s;margin-top:8px}
-.download-btn:hover{background:rgba(74,240,176,.08)}
-.download-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+/* BADGES */
+.bx{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:500;letter-spacing:.04em}
+.bx.pass{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.2)}
+.bx.fail{background:rgba(255,92,92,.1);color:var(--red);border:1px solid rgba(255,92,92,.2)}
+.bx.info{background:rgba(61,155,255,.1);color:var(--blue);border:1px solid rgba(61,155,255,.2)}
 
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:40px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px 18px}
-.stat-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.stat-value{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text);line-height:1}
-.stat-value.accent{color:var(--accent)}
-.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
-
-.section-head{display:flex;align-items:center;gap:12px;margin:40px 0 16px}
-.section-head h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
-.section-line{flex:1;height:1px;background:var(--border)}
-
-.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:32px}
+/* TABLES */
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);margin-bottom:24px}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);font-weight:400}
-td{padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono)}
+thead tr{background:var(--bg2)}
+th{padding:9px 13px;text-align:left;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);font-weight:400;white-space:nowrap}
+td{padding:8px 13px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:var(--surface2)}
-.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:500}
-.badge.pass{background:rgba(74,240,176,.12);color:var(--accent)}
-.badge.fail{background:rgba(240,96,96,.12);color:var(--danger)}
-.r2-bar{display:flex;align-items:center;gap:8px}
-.r2-track{width:80px;height:4px;background:var(--border2);border-radius:2px;overflow:hidden;flex-shrink:0}
-.r2-fill{height:100%;background:var(--accent);border-radius:2px}
+tbody tr:hover td{background:var(--bg2)}
+.tac{color:var(--accent);font-weight:500}
+.tbl{color:var(--blue)}
+.tmt{color:var(--text3)}
+.r2w{display:flex;align-items:center;gap:8px}
+.r2t{width:70px;height:3px;background:var(--border2);border-radius:2px;flex-shrink:0}
+.r2f{height:100%;border-radius:2px;background:var(--accent)}
 
-.shap-prop-select{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:16px;outline:none;cursor:pointer}
-.shap-prop-select:focus{border-color:var(--accent)}
-.shap-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:32px}
-.shap-row{display:flex;align-items:center;gap:12px}
-.shap-feat{width:48px;font-size:11px;color:var(--muted);text-align:right;flex-shrink:0}
-.shap-track{flex:1;height:8px;background:var(--border2);border-radius:4px;overflow:hidden}
-.shap-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .5s ease}
-.shap-val{width:72px;font-size:11px;color:var(--muted)}
+/* RESULT TABS */
+.rtabs{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;margin-bottom:24px;flex-wrap:nowrap}
+.rtab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:10px 16px;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
+.rtab:hover{color:var(--text2)}
+.rtab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.rpan{display:none}
+.rpan.on{display:block;animation:fadeUp .2s ease}
 
-.heatmap-wrap{overflow-x:auto;margin-bottom:32px}
-.heatmap-table{border-collapse:collapse;font-size:11px;font-family:var(--mono)}
-.heatmap-table th{padding:8px 12px;color:var(--muted);font-weight:400;font-size:10px;letter-spacing:.08em;text-align:center}
-.heatmap-table td{padding:8px 12px;border-radius:3px;font-size:12px;text-align:center}
-.row-label{text-align:left !important;color:var(--muted);padding-right:16px !important}
+/* SHAP */
+.ssel{background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r);padding:7px 12px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:14px;outline:none;cursor:pointer}
+.ssel:focus{border-color:var(--accent)}
+.srows{display:flex;flex-direction:column;gap:7px;margin-bottom:24px}
+.srow{display:flex;align-items:center;gap:10px}
+.slbl{width:54px;font-size:11px;color:var(--text3);text-align:right;flex-shrink:0}
+.strk{flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+.sfil{height:100%;border-radius:4px;transition:width .5s ease}
+.sval{width:70px;font-size:11px;color:var(--text3)}
 
-.drug-table-note{font-size:11px;color:var(--muted);margin-bottom:10px}
-.new-search-btn{margin-top:32px;background:transparent;border:1px solid var(--border2);border-radius:4px;padding:10px 20px;font-family:var(--mono);font-size:12px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
-.new-search-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* HEATMAP */
+.hmw{overflow-x:auto;margin-bottom:24px}
+.hmt{border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+.hmt th{padding:7px 10px;color:var(--text3);font-weight:400;font-size:10px;letter-spacing:.06em;text-align:center}
+.hmt td{padding:6px 10px;border-radius:3px;text-align:center;font-size:11px}
+.hmlbl{text-align:left!important;color:var(--text2);padding-right:14px!important;white-space:nowrap;font-weight:500}
+.leg{display:flex;gap:14px;font-size:11px;color:var(--text3);margin-bottom:10px;flex-wrap:wrap}
 
-footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+/* SEARCH PAGE */
+.search-hero{padding:64px 0 0;max-width:680px;margin:0 auto;padding-left:32px;padding-right:32px}
+#di{flex:1;background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r);padding:14px 18px;font-family:var(--mono);font-size:15px;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s}
+#di::placeholder{color:var(--text3)}
+#di:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,160,.07)}
+#di:disabled{opacity:.4;cursor:not-allowed}
+#di.err{border-color:var(--red)}
+#di.wrn{border-color:var(--yellow)}
+.srow-inp{display:flex;gap:8px;margin-top:12px}
+.rbtn{background:var(--accent);color:#000;border:none;border-radius:var(--r);padding:14px 26px;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s,transform .1s;flex-shrink:0;letter-spacing:.02em}
+.rbtn:hover{background:var(--accent2)}
+.rbtn:active{transform:scale(.97)}
+.rbtn:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;transform:none}
+.mbox{margin-top:12px;font-size:12px;padding:9px 13px;border-radius:var(--r);border-left:3px solid;display:none}
+.mbox.on{display:block}
+.mbox.er{border-color:var(--red);background:rgba(255,92,92,.05);color:#ff9090}
+.mbox.wn{border-color:var(--yellow);background:rgba(245,200,66,.05);color:#f5d87a}
+.mbox.ok{border-color:var(--accent);background:rgba(0,229,160,.05);color:var(--accent)}
+.pills{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.pill{background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:4px 12px;font-size:11px;color:var(--text3);cursor:pointer;font-family:var(--mono);transition:border-color .15s,color .15s}
+.pill:hover{border-color:var(--accent);color:var(--accent)}
+.bban{display:none;margin-top:16px;padding:10px 14px;border-radius:var(--r);border-left:3px solid var(--red);background:rgba(255,92,92,.05);font-size:12px;color:#ff9090;line-height:1.7}
+.bban.on{display:block}
+.bban code{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px}
 
-.fade-in{animation:fadeIn .5s ease forwards}
-@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+/* PROGRESS */
+#prog-sec{display:none;padding:60px 0 40px}
+.pc{max-width:640px;margin:0 auto;padding:0 32px}
+.pt{font-family:var(--serif);font-size:22px;font-weight:300;margin-bottom:4px}
+.pt em{font-style:italic;color:var(--accent)}
+.ps{font-size:11px;color:var(--text3);margin-bottom:20px;letter-spacing:.06em}
+.segbar{display:flex;gap:4px;margin-bottom:4px}
+.seg{flex:1;height:5px;border-radius:3px;background:var(--border2);transition:background .4s}
+.seglbls{display:flex;gap:4px;margin-bottom:18px}
+.seglbl{flex:1;font-size:9px;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase}
+.ptrk{height:2px;background:var(--border2);border-radius:1px;overflow:hidden;margin-bottom:22px}
+.pbar{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--accent),var(--blue),var(--accent));background-size:200%;width:40%;animation:slide 1.4s ease-in-out infinite,shim 2s linear infinite}
+.pbar.done{animation:none;width:100%;background:var(--accent)}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+@keyframes shim{0%{background-position:200%}100%{background-position:-200%}}
+@keyframes pseg{0%,100%{opacity:1}50%{opacity:.3}}
+.psteps{display:flex;flex-direction:column;gap:10px}
+.pstep{display:flex;align-items:flex-start;gap:12px;opacity:.3;transition:opacity .3s}
+.pstep.on{opacity:1}
+.pstep.dn{opacity:.65}
+.pstep-ico{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:9px;transition:border-color .3s,background .3s;color:var(--text3)}
+.pstep.on .pstep-ico{border-color:var(--accent);color:var(--accent);animation:pseg 1s ease-in-out infinite}
+.pstep.dn .pstep-ico{border-color:var(--accent);background:var(--accent);color:#000;animation:none}
+.pstep-txt{font-size:12px;color:var(--text);font-weight:500}
+.pstep-sub{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.55}
 
-@media(max-width:600px){
-  .search-row{flex-direction:column}
-  .results-header{flex-direction:column;align-items:flex-start;gap:12px}
-  .stat-grid{grid-template-columns:1fr 1fr}
-  .logo{font-size:28px}
+/* RESULTS */
+.res-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.res-title{font-family:var(--serif);font-size:30px;font-weight:300;letter-spacing:-.7px}
+.res-title em{font-style:italic;color:var(--accent)}
+.res-meta{font-size:11px;color:var(--text3);margin-top:4px}
+.dlrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.dlbtn{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);padding:8px 16px;font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:none;transition:border-color .15s,color .15s;letter-spacing:.02em}
+.dlbtn:hover{border-color:var(--accent);color:var(--accent)}
+.dlbtn.bl{border-color:rgba(61,155,255,.35);color:var(--blue)}
+.dlbtn.bl:hover{border-color:var(--blue)}
+.dlbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.nsb{margin-top:28px;background:transparent;border:1px solid var(--border);border-radius:var(--r);padding:9px 18px;font-family:var(--mono);font-size:11px;color:var(--text3);cursor:pointer;transition:border-color .15s,color .15s}
+.nsb:hover{border-color:var(--accent);color:var(--accent)}
+
+/* INDEX PILLS */
+.ifam{margin-bottom:18px}
+.ifam-hd{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.ipills{display:flex;flex-wrap:wrap;gap:5px}
+.ipill{background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:3px 10px;font-size:11px;color:var(--text2)}
+.ipill.dim{color:var(--text3);border-style:dashed}
+
+/* HOW-TO STEPS */
+.hsteps{display:flex;flex-direction:column;gap:10px;margin-bottom:32px}
+.hstep{display:flex;gap:16px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;align-items:flex-start}
+.hnum{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--accent);flex-shrink:0;line-height:1;width:28px;padding-top:2px}
+.htitle{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px}
+.hdesc{font-size:12px;color:var(--text3);line-height:1.65}
+
+/* CONTACT */
+.ccard{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;max-width:480px}
+.cname{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text);margin-bottom:4px}
+.crole{font-size:11px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}
+.crow{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;color:var(--text2)}
+.crow a{color:var(--blue);text-decoration:none}
+.crow a:hover{text-decoration:underline}
+.cico{width:15px;height:15px;flex-shrink:0;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* FOOTER */
+footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--text3);letter-spacing:.06em}
+
+@media(max-width:640px){
+  .srow-inp{flex-direction:column}
+  .display{font-size:30px}
+  .wrap{padding:24px 16px 60px}
+  .search-hero{padding:36px 16px 0}
+  nav{padding:0 16px}
+  .nav-links{gap:0}
+  .nav-btn{padding:6px 8px;font-size:10px}
 }
 </style>
 </head>
 <body>
-<div class="page">
 
-  <header>
-    <div class="logo">Molecu<em>Lens</em></div>
-    <div class="tagline">Drug QSPR Pipeline &mdash; Topological Indices &times; Machine Learning</div>
-    <div class="backend-banner" id="backend-banner">
-      Backend not reachable at <strong id="api-url-label"></strong>.<br>
-      Start your server: <code>uvicorn website:app --reload --port 8000</code> then refresh this page.
+<nav>
+  <div class="nav-logo" onclick="showPg('home')">Molecu<em>Lens</em></div>
+  <div class="nav-links">
+    <button class="nav-btn on" data-pg="home" onclick="showPg('home')">Pipeline</button>
+    <button class="nav-btn" data-pg="about" onclick="showPg('about')">About</button>
+    <button class="nav-btn" data-pg="howto" onclick="showPg('howto')">How to use</button>
+    <button class="nav-btn" data-pg="contact" onclick="showPg('contact')">Contact</button>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════ PAGE: HOME ═══ -->
+<div id="pg-home" class="pg on">
+  <div class="search-hero">
+    <div class="eyebrow">Drug QSPR Research Pipeline</div>
+    <div style="font-family:var(--serif);font-size:36px;font-weight:300;letter-spacing:-1px;line-height:1.1">Molecu<em style="font-style:italic;color:var(--accent)">Lens</em></div>
+    <div style="font-size:12px;color:var(--text3);margin-top:6px;margin-bottom:20px">Topological Indices × Machine Learning × Real Drug Data</div>
+    <div class="eyebrow" style="margin-bottom:8px">Enter a disease name</div>
+    <div class="srow-inp">
+      <input id="di" type="text" placeholder="e.g. diabetes, hypertension, alzheimer..." autocomplete="off" spellcheck="false"/>
+      <button class="rbtn" id="rbtn" onclick="handleRun()">Analyse →</button>
     </div>
-  </header>
-
-  <section class="search-section">
-    <div class="search-label">Enter a disease</div>
-    <div class="search-row">
-      <input id="disease-input" type="text" placeholder="e.g. diabetes, hypertension, alzheimer..." autocomplete="off" spellcheck="false"/>
-      <button class="run-btn" id="run-btn" onclick="handleRun()">Analyse &rarr;</button>
+    <div class="mbox" id="mbox"></div>
+    <div class="pills" id="pill-box"></div>
+    <div class="bban" id="bban">
+      Backend not reachable at <strong id="api-lbl"></strong>.<br>
+      Start: <code>uvicorn website:app --reload --port 8000</code> then refresh.
     </div>
-    <div class="msg" id="msg-box"></div>
-    <div class="suggestions" id="suggestions-box"></div>
-  </section>
+  </div>
 
-  <section id="progress-section">
-    <div class="progress-header">
-      <span class="progress-title">Running &mdash; <em id="progress-disease" style="color:var(--accent);font-style:italic"></em></span>
-      <span class="progress-status" id="progress-status">Starting...</span>
+  <!-- Progress -->
+  <div id="prog-sec">
+    <div class="pc">
+      <div class="pt">Running — <em id="prog-dis"></em></div>
+      <div class="ps" id="prog-stat">Initialising...</div>
+      <div class="segbar">
+        <div class="seg" id="sg0"></div><div class="seg" id="sg1"></div>
+        <div class="seg" id="sg2"></div><div class="seg" id="sg3"></div>
+        <div class="seg" id="sg4"></div>
+      </div>
+      <div class="seglbls">
+        <div class="seglbl">Fetch</div><div class="seglbl">Filter</div>
+        <div class="seglbl">Indices</div><div class="seglbl">ML</div>
+        <div class="seglbl">SHAP</div>
+      </div>
+      <div class="ptrk"><div class="pbar" id="pbar"></div></div>
+      <div class="psteps">
+        <div class="pstep" id="ps0"><div class="pstep-ico">1</div><div>
+          <div class="pstep-txt">Fetching drug data from 4 sources</div>
+          <div class="pstep-sub">ChEMBL (disease→drug mapping + SMILES) · PubChem (20 physicochemical props) · pkCSM (ADMET predictions) · UniChem (cross-DB IDs) · ChEMBL Bioactivity (IC50, Ki, EC50, Kd)</div>
+        </div></div>
+        <div class="pstep" id="ps1"><div class="pstep-ico">2</div><div>
+          <div class="pstep-txt">Applying drug-likeness filters</div>
+          <div class="pstep-sub">Lipinski Rule of Five (MW≤500, LogP≤5, HBD≤5, HBA≤10) · Veber rules (RotBonds≤10, TPSA≤140) · PAINS substructure filter</div>
+        </div></div>
+        <div class="pstep" id="ps2"><div class="pstep-ico">3</div><div>
+          <div class="pstep-txt">Computing 39 topological indices</div>
+          <div class="pstep-sub">9 original degree-based (M1,M2,ABC,R,H,F,AZI,GA,SC) · 11 new degree-based (BM,TM,GH,GBM,GTM,HG,BMG,BMH,TMG,TMH,SDD) · 9 reverse-degree (RM1…RSDD) · 5 degree-sum (DS1…DSGA) · 5 distance-based (Wiener, Balaban J, Hosoya Z, Szeged, Graph Entropy)</div>
+        </div></div>
+        <div class="pstep" id="ps3"><div class="pstep-ico">4</div><div>
+          <div class="pstep-txt">ML training + correlation analysis</div>
+          <div class="pstep-sub">11 models (Linear, Ridge, Lasso, ElasticNet, RandomForest, ExtraTrees, GradientBoosting, XGBoost, SVR, GaussianProcess, NeuralNet) · 5-fold CV + GridSearchCV · Pearson + Spearman + p-values + VIF multicollinearity</div>
+        </div></div>
+        <div class="pstep" id="ps4"><div class="pstep-ico">5</div><div>
+          <div class="pstep-txt">SHAP feature importance + export</div>
+          <div class="pstep-sub">TreeExplainer (RF, XGB, ET, GB) · KernelExplainer (others) · Exporting CSV + Excel workbook (7 sheets)</div>
+        </div></div>
+      </div>
     </div>
-    <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
-    <div class="progress-steps">
-      <div class="step" id="step-fetch">  <div class="step-dot"></div><span>Fetching drugs — ChEMBL, PubChem, pkCSM</span></div>
-      <div class="step" id="step-filter"> <div class="step-dot"></div><span>Drug-likeness filters — Lipinski, Veber, PAINS</span></div>
-      <div class="step" id="step-topo">   <div class="step-dot"></div><span>Topological indices — M1, M2, ABC, R, H, F</span></div>
-      <div class="step" id="step-ml">     <div class="step-dot"></div><span>ML training — k-fold CV + hyperparameter tuning</span></div>
-      <div class="step" id="step-shap">   <div class="step-dot"></div><span>SHAP feature importance analysis</span></div>
+  </div>
+
+  <!-- Results -->
+  <div id="res-sec" style="display:none">
+    <div class="wrap">
+      <div class="res-hdr">
+        <div>
+          <div class="eyebrow">Analysis complete</div>
+          <div class="res-title" id="res-ttl">—</div>
+          <div class="res-meta" id="res-meta">—</div>
+        </div>
+        <div class="dlrow" id="dlrow"></div>
+      </div>
+      <div class="cgrid c4" id="stat-grid"></div>
+      <div class="rtabs" id="rtabs"></div>
+      <div id="rpans"></div>
+      <button class="nsb" onclick="doReset()">← New search</button>
     </div>
-  </section>
-
-  <section id="results-section"></section>
-
-  <footer>
-    <span>MolecuLens &mdash; Drug QSPR Research Pipeline</span>
-    <span>Data: ChEMBL &middot; PubChem &middot; pkCSM</span>
-  </footer>
+  </div>
 </div>
 
-<script>
-// ── CONFIGURE YOUR BACKEND URL HERE ──────────────────────────────────────
-const API = '';
-// Empty string = same server as the page (works locally AND on Railway/any host)
-// Only change this if your frontend and backend are on different servers
-// ─────────────────────────────────────────────────────────────────────────
+<!-- ═══════════════════════════════════════════ PAGE: ABOUT ═══ -->
+<div id="pg-about" class="pg">
+  <div class="wrap">
+    <div style="padding-bottom:32px;margin-bottom:32px;border-bottom:1px solid var(--border)">
+      <div class="eyebrow">About this tool</div>
+      <div class="display">Molecu<em>Lens</em></div>
+      <div class="lead">An automated drug discovery research platform. Type any disease name — MolecuLens fetches real drug data from multiple databases, computes 39 graph-theoretic topological indices, trains 11 ML models with rigorous 5-fold CV, and delivers a full QSPR analysis with statistical significance testing, SHAP explanations, and drug-likeness filters.</div>
+    </div>
 
-let pollTimer      = null;
-let currentJobId   = null;
-let currentResults = null;
+    <div class="sh"><h2>Data <em>sources</em></h2><div class="sh-line"></div></div>
+    <div class="cgrid c2" style="margin-bottom:36px">
+      <div class="card"><div class="clabel">ChEMBL</div><div class="cbody"><strong style="color:var(--text)">Role:</strong> Disease→drug mapping. The only free database linking disease names to drug molecules via MeSH headings.<br><strong style="color:var(--text)">Returns:</strong> ChEMBL IDs, canonical SMILES, and 7 RDKit-computed base properties (MolWt, LogP, TPSA, HBD, HBA, RotBonds, MolMR).</div></div>
+      <div class="card"><div class="clabel">PubChem</div><div class="cbody"><strong style="color:var(--text)">Role:</strong> Physicochemical enrichment from standardised structures.<br><strong style="color:var(--text)">Returns:</strong> 20 properties — XLogP3, ExactMass, TPSA, Complexity, FormalCharge, HBD/HBA, RotatableBonds, HeavyAtomCount, AtomStereoCount, CovalentUnitCount, and more.</div></div>
+      <div class="card"><div class="clabel">pkCSM</div><div class="cbody"><strong style="color:var(--text)">Role:</strong> ADMET pharmacokinetic prediction from SMILES.<br><strong style="color:var(--text)">Returns:</strong> Caco2, intestinal absorption, P-gp substrate, BBB permeability, CNS permeability, CYP substrates/inhibitors, hERG, AMES, LD50, hepatotoxicity. Falls back to RDKit-estimated ADMET if API is unavailable.</div></div>
+      <div class="card"><div class="clabel">UniChem + ChEMBL Bioactivity</div><div class="cbody"><strong style="color:var(--text)">UniChem:</strong> Cross-database IDs — ChemSpider, ZINC, DrugBank, ChEBI, BindingDB (3 fallback strategies).<br><strong style="color:var(--text)">ChEMBL Bioactivity:</strong> Experimental IC50, Ki, EC50, Kd values from ChEMBL assays per drug.</div></div>
+    </div>
 
-// ── CHECK BACKEND ON LOAD ──
-window.addEventListener('load', async () => {
-  document.getElementById('api-url-label').textContent = API;
-  try {
-    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error('Bad response');
-    // Backend is up — show brief confirmation
-    setMsg('Backend connected. Enter a disease name to begin.', 'info');
-    setTimeout(clearMsg, 3000);
-  } catch {
-    document.getElementById('backend-banner').classList.add('show');
-    document.getElementById('disease-input').disabled = true;
-    document.getElementById('run-btn').disabled = true;
-  }
-});
+    <div class="sh"><h2>39 Topological <em>indices</em></h2><div class="sh-line"></div></div>
+    <div class="card" style="margin-bottom:32px">
+      <div class="ifam"><div class="ifam-hd">Original degree-based (9)</div><div class="ipills"><span class="ipill">M1 — First Zagreb</span><span class="ipill">M2 — Second Zagreb</span><span class="ipill">ABC — Atom-Bond Connectivity</span><span class="ipill">R — Randić</span><span class="ipill">H — Harmonic</span><span class="ipill">F — Forgotten</span><span class="ipill">AZI — Augmented Zagreb</span><span class="ipill">GA — Geometric-Arithmetic</span><span class="ipill">SC — Sum-Connectivity</span></div></div>
+      <div class="ifam"><div class="ifam-hd">New degree-based (11)</div><div class="ipills"><span class="ipill">BM — Bi-Zagreb</span><span class="ipill">TM — Tri-Zagreb</span><span class="ipill">GH — Geometric-Harmonic</span><span class="ipill">GBM — Geometric Bi-Zagreb</span><span class="ipill">GTM — Geometric Tri-Zagreb</span><span class="ipill">HG — Harmonic-Geometric</span><span class="ipill">BMG — Bi Zagreb-Geometric</span><span class="ipill">BMH — Bi Zagreb-Harmonic</span><span class="ipill">TMG — Tri Zagreb-Geometric</span><span class="ipill">TMH — Tri Zagreb-Harmonic</span><span class="ipill">SDD — Symmetric Degree Division</span></div></div>
+      <div class="ifam"><div class="ifam-hd">Reverse-degree variants (9) — rd(v) = n+1−d(v)</div><div class="ipills"><span class="ipill">RM1</span><span class="ipill">RM2</span><span class="ipill">RABC</span><span class="ipill">RR</span><span class="ipill">RH</span><span class="ipill">RF</span><span class="ipill">RGA</span><span class="ipill">RBM</span><span class="ipill">RSDD</span></div></div>
+      <div class="ifam"><div class="ifam-hd">Degree-sum variants (5) — weight = d(u)+d(v)</div><div class="ipills"><span class="ipill">DS1</span><span class="ipill">DS2</span><span class="ipill">DSR</span><span class="ipill">DSH</span><span class="ipill">DSGA</span></div></div>
+      <div class="ifam" style="margin-bottom:0"><div class="ifam-hd">Distance-based (5)</div><div class="ipills"><span class="ipill">W — Wiener</span><span class="ipill">J — Balaban J</span><span class="ipill">Z — Hosoya</span><span class="ipill">Sz — Szeged</span><span class="ipill">GE — Graph Entropy</span></div></div>
+    </div>
 
-document.getElementById('disease-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleRun();
-});
+    <div class="sh"><h2>11 ML <em>models</em></h2><div class="sh-line"></div></div>
+    <div class="cgrid c2" style="margin-bottom:32px">
+      <div class="card"><div class="clabel">Linear family</div><div class="cbody">Linear Regression · Ridge · Lasso · ElasticNet</div></div>
+      <div class="card"><div class="clabel">Tree-based</div><div class="cbody">Random Forest · Extra Trees · Gradient Boosting · XGBoost</div></div>
+      <div class="card"><div class="clabel">Kernel / probabilistic</div><div class="cbody">Support Vector Regression (SVR) · Gaussian Process Regressor (Matérn kernel)</div></div>
+      <div class="card"><div class="clabel">Neural network</div><div class="cbody">MLP Neural Network — 64→32 hidden layers<br><span style="color:var(--text3)">All models: 5-fold CV + GridSearchCV + SHAP</span></div></div>
+    </div>
 
-// ── HELPERS ──
-function setMsg(text, type) {
-  const el = document.getElementById('msg-box');
-  el.textContent = text;
-  el.className = 'msg show ' + type;
-}
-function clearMsg() {
-  const el = document.getElementById('msg-box');
-  el.className = 'msg';
-}
-function setBtn(disabled, label) {
-  const b = document.getElementById('run-btn');
-  b.disabled = disabled;
-  b.textContent = label ?? (disabled ? 'Running...' : 'Analyse →');
-}
-function showSuggestions(list) {
-  const box = document.getElementById('suggestions-box');
-  box.innerHTML = '';
-  list.forEach(s => {
-    const p = document.createElement('button');
-    p.className = 'pill';
-    p.textContent = s;
-    p.onclick = () => {
-      document.getElementById('disease-input').value = s;
-      document.getElementById('disease-input').classList.remove('error','warn');
-      box.innerHTML = '';
-      clearMsg();
-      handleRun();
-    };
-    box.appendChild(p);
-  });
-}
-function sectionHead(label) {
-  const el = document.createElement('div');
-  el.className = 'section-head';
-  el.innerHTML = `<h2>${label}</h2><div class="section-line"></div>`;
-  return el;
-}
-
-// ── VALIDATE ──
-async function handleRun() {
-  const raw = document.getElementById('disease-input').value.trim();
-  if (!raw) { setMsg('Please enter a disease name.', 'error'); return; }
-
-  clearMsg();
-  document.getElementById('suggestions-box').innerHTML = '';
-  document.getElementById('disease-input').classList.remove('error','warn');
-  setBtn(true);
-
-  let v;
-  try {
-    const res = await fetch(`${API}/validate`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({disease: raw}),
-      signal: AbortSignal.timeout(10000),
-    });
-    v = await res.json();
-  } catch (e) {
-    setMsg('Cannot reach backend. Is the server running?', 'error');
-    setBtn(false, 'Analyse →');
-    return;
-  }
-
-  if (!v.valid) {
-    document.getElementById('disease-input').classList.add('error');
-    if (v.errors?.length)      setMsg(v.errors[0], 'error');
-    if (v.suggestions?.length) showSuggestions(v.suggestions);
-    setBtn(false, 'Analyse →');
-    return;
-  }
-
-  if (v.warnings?.length) {
-    document.getElementById('disease-input').classList.add('warn');
-    setMsg(v.warnings[0], 'warn');
-  }
-
-  runPipeline(v.disease || raw, !!v.warnings?.length);
-}
-
-// ── RUN PIPELINE ──
-async function runPipeline(disease, force) {
-  showProgress(disease);
-
-  let jobId;
-  try {
-    const res = await fetch(`${API}/run`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({disease, force_proceed: force}),
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.detail?.errors?.[0] || 'Pipeline failed to start.');
-    }
-    const data = await res.json();
-    jobId = data.job_id;
-    currentJobId = jobId;
-  } catch (e) {
-    hideProgress();
-    setMsg(e.message, 'error');
-    setBtn(false, 'Analyse →');
-    return;
-  }
-
-  poll(jobId);
-}
-
-// ── POLL STATUS ──
-function poll(jobId) {
-  if (pollTimer) clearInterval(pollTimer);
-  const STEPS = ['step-fetch','step-filter','step-topo','step-ml','step-shap'];
-  // Approximate seconds when each step starts
-  const TIMINGS = [0, 35, 65, 95, 130];
-  let stepIdx = 0;
-  let elapsed = 0;
-  advanceStep(STEPS[0]);
-
-  pollTimer = setInterval(async () => {
-    elapsed += 5;
-
-    // Advance visual step based on time elapsed
-    const due = TIMINGS.filter(t => elapsed >= t).length - 1;
-    const next = Math.min(due, STEPS.length - 1);
-    if (next > stepIdx) {
-      markDone(STEPS[stepIdx]);
-      stepIdx = next;
-      advanceStep(STEPS[stepIdx]);
-    }
-
-    try {
-      const res  = await fetch(`${API}/status/${jobId}`, {signal: AbortSignal.timeout(6000)});
-      const data = await res.json();
-      document.getElementById('progress-status').textContent = data.status;
-
-      if (data.status === 'complete') {
-        clearInterval(pollTimer);
-        STEPS.forEach(s => markDone(s));
-        document.getElementById('progress-bar').classList.add('done');
-        // Fetch results with explicit error handling
-        try {
-          const rRes = await fetch(`${API}/results/${jobId}`);
-          if (!rRes.ok) throw new Error('HTTP ' + rRes.status);
-          const results = await rRes.json();
-          if (!results || typeof results !== 'object') throw new Error('Empty response');
-          renderResults(results, jobId);
-        } catch(fetchErr) {
-          hideProgress();
-          setMsg('Pipeline finished but results failed to load: ' + fetchErr.message + '. Try refreshing.', 'error');
-          setBtn(false, 'Analyse →');
-        }
-
-      } else if (data.status === 'failed') {
-        clearInterval(pollTimer);
-        hideProgress();
-        setMsg('Pipeline failed: ' + (data.error || 'Check server logs for details.'), 'error');
-        setBtn(false, 'Analyse →');
-      }
-    } catch {
-      // Transient network blip — keep polling silently
-    }
-  }, 5000);
-}
-
-// ── PROGRESS UI ──
-function showProgress(disease) {
-  if (pollTimer) clearInterval(pollTimer);
-  document.getElementById('progress-disease').textContent = disease;
-  document.getElementById('progress-section').style.display = 'block';
-  document.getElementById('results-section').style.display  = 'none';
-  document.getElementById('progress-bar').classList.remove('done');
-  document.querySelectorAll('.step').forEach(s => s.className = 'step');
-}
-function hideProgress() {
-  document.getElementById('progress-section').style.display = 'none';
-}
-function advanceStep(id) {
-  document.getElementById(id).className = 'step active';
-  const labels = {
-    'step-fetch':'Fetching drug data...','step-filter':'Filtering drugs...',
-    'step-topo':'Computing indices...','step-ml':'Training models...','step-shap':'SHAP analysis...'
-  };
-  document.getElementById('progress-status').textContent = labels[id] || 'Running...';
-}
-function markDone(id) {
-  const el = document.getElementById(id);
-  if (el) el.className = 'step done';
-}
-
-// ── RENDER RESULTS ──
-function renderResults(data, jobId) {
-  hideProgress();
-  setBtn(false, 'Analyse →');
-  clearMsg();
-  currentResults = data;
-
-  const sec = document.getElementById('results-section');
-  sec.style.display = 'block';
-  sec.innerHTML = '';
-
-  const n = data.drug_count || 1;
-
-  // Header + download
-  const hdr = document.createElement('div');
-  hdr.className = 'results-header fade-in';
-  hdr.innerHTML = `
-    <div><div class="results-title">Results for <em>${data.disease}</em></div></div>
-    <div class="results-meta">
-      <div>${data.drug_count} drugs analysed</div>
-      <div>${data.columns?.length ?? 0} properties per drug</div>
-      <a class="download-btn" href="${API}/download/${jobId}" download>
-        <svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>
-        Download CSV
-      </a>
-      <a class="download-btn" href="${API}/download-excel/${jobId}" download style="margin-top:6px;border-color:#4ab4f0;color:#4ab4f0">
-        <svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>
-        Download Excel (7 sheets)
-      </a>
-    </div>`;
-  sec.appendChild(hdr);
-
-  // Stat cards
-  const lipPct = Math.round((data.lipinski_pass ?? 0) / n * 100);
-  const vebPct = Math.round((data.veber_pass    ?? 0) / n * 100);
-  const paiPct = Math.round((data.pains_pass    ?? 0) / n * 100);
-  const bestR2 = data.top_models?.length
-    ? Math.max(...data.top_models.map(m => m.R2_mean ?? 0)).toFixed(3) : '—';
-
-  const cards = document.createElement('div');
-  cards.className = 'stat-grid fade-in';
-  cards.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Drugs analysed</div><div class="stat-value accent">${data.drug_count}</div></div>
-    <div class="stat-card"><div class="stat-label">Best R²</div><div class="stat-value">${bestR2}</div></div>
-    <div class="stat-card"><div class="stat-label">Lipinski pass</div><div class="stat-value">${lipPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.lipinski_pass ?? 0} of ${n}</div></div>
-    <div class="stat-card"><div class="stat-label">Veber pass</div><div class="stat-value">${vebPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.veber_pass ?? 0} of ${n}</div></div>
-    <div class="stat-card"><div class="stat-label">PAINS clean</div><div class="stat-value">${paiPct}<span style="font-size:16px;color:var(--muted)">%</span></div><div class="stat-sub">${data.pains_pass ?? 0} of ${n}</div></div>`;
-  sec.appendChild(cards);
-
-  // Best model per property
-  if (data.top_models?.length) {
-    sec.appendChild(sectionHead('Best model per property (k-fold CV)'));
-    const wrap = document.createElement('div');
-    wrap.className = 'table-wrap fade-in';
-    wrap.innerHTML = `<table><thead><tr>
-      <th>Property</th><th>Best model</th><th>R² mean</th><th>R² std</th><th>MAE</th>
-    </tr></thead><tbody>${data.top_models.map(m => {
-      const r2  = typeof m.R2_mean  === 'number' ? m.R2_mean.toFixed(3)  : '—';
-      const std = typeof m.R2_std   === 'number' ? m.R2_std.toFixed(3)   : '—';
-      const mae = typeof m.MAE_mean === 'number' ? m.MAE_mean.toFixed(3) : '—';
-      const pct = Math.max(0, Math.min(100, (m.R2_mean ?? 0) * 100));
-      return `<tr>
-        <td>${m.Property}</td>
-        <td style="color:var(--accent)">${m.Model}</td>
-        <td><div class="r2-bar"><div class="r2-track"><div class="r2-fill" style="width:${pct}%"></div></div>${r2}</div></td>
-        <td style="color:var(--muted)">±${std}</td>
-        <td style="color:var(--muted)">${mae}</td></tr>`;
-    }).join('')}</tbody></table>`;
-    sec.appendChild(wrap);
-  }
-
-  // All ML results
-  if (data.ml_results?.length) {
-    sec.appendChild(sectionHead('All model results'));
-    const wrap = document.createElement('div');
-    wrap.className = 'table-wrap fade-in';
-    wrap.innerHTML = `<table><thead><tr>
-      <th>Property</th><th>Model</th><th>R² mean</th><th>R² std</th><th>MAE</th>
-    </tr></thead><tbody>${data.ml_results.map(m => `<tr>
-        <td>${m.Property}</td><td>${m.Model}</td>
-        <td>${typeof m.R2_mean  === 'number' ? m.R2_mean.toFixed(3)  : '—'}</td>
-        <td style="color:var(--muted)">±${typeof m.R2_std   === 'number' ? m.R2_std.toFixed(3)   : '—'}</td>
-        <td style="color:var(--muted)">${typeof m.MAE_mean === 'number' ? m.MAE_mean.toFixed(3) : '—'}</td>
-      </tr>`).join('')}</tbody></table>`;
-    sec.appendChild(wrap);
-  }
-
-  // SHAP
-  if (data.shap && Object.keys(data.shap).length) {
-    sec.appendChild(sectionHead('Feature importance (SHAP)'));
-    const props = Object.keys(data.shap);
-    const shapWrap = document.createElement('div');
-    shapWrap.className = 'fade-in';
-    const sel = document.createElement('select');
-    sel.className = 'shap-prop-select';
-    sel.id = 'shap-select';
-    props.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
-    sel.onchange = () => renderShap(sel.value);
-    // Add index family info below SHAP
-    const indexFamilies = {
-      'Original (9)':      ['M1','M2','ABC','R','H','F','AZI','GA','SC'],
-      'New degree-based (11)': ['BM','TM','GH','GBM','GTM','HG','BMG','BMH','TMG','TMH','SDD'],
-      'Reverse-degree (9)':['RM1','RM2','RABC','RR','RH','RF','RGA','RBM','RSDD'],
-      'Degree-sum (5)':    ['DS1','DS2','DSR','DSH','DSGA'],
-      'Distance-based (5)':['W','J','Z','Sz','GE'],
-    };
-    const shapGrid = document.createElement('div');
-    shapGrid.className = 'shap-grid';
-    shapGrid.id = 'shap-grid';
-    shapWrap.appendChild(sel);
-    shapWrap.appendChild(shapGrid);
-    sec.appendChild(shapWrap);
-    renderShap(props[0]);
-  }
-
-  // Pearson correlation heatmap
-  if (data.correlation && Object.keys(data.correlation).length) {
-    sec.appendChild(sectionHead('Pearson correlation matrix'));
-    renderHeatmap(data.correlation, sec);
-  }
-
-  // Drug data preview
-  if (data.drugs_preview?.length) {
-    sec.appendChild(sectionHead('Drug data preview — first 10 rows'));
-    const note = document.createElement('div');
-    note.className = 'drug-table-note';
-    note.textContent = 'Showing a subset of columns. Download the full CSV for all drugs and all properties.';
-    sec.appendChild(note);
-
-    const allCols = Object.keys(data.drugs_preview[0]);
-    const priority = ['ChEMBL_ID','MolWt','LogP','TPSA','HBD','HBA','RotBonds',
-      'PC_XLogP','PC_Complexity','PC_HeavyAtomCount','M1','M2','ABC','R','H','F',
-      'Lipinski_Pass','Veber_Pass','PAINS_Pass'];
-    const cols = [...priority.filter(c => allCols.includes(c)),
-                  ...allCols.filter(c => !priority.includes(c) && c !== 'SMILES')];
-
-    const wrap = document.createElement('div');
-    wrap.className = 'table-wrap fade-in';
-    wrap.innerHTML = `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-      <tbody>${data.drugs_preview.map(row => '<tr>' + cols.map(c => {
-        const v = row[c];
-        if (['Lipinski_Pass','Veber_Pass','PAINS_Pass'].includes(c))
-          return `<td><span class="badge ${v?'pass':'fail'}">${v?'PASS':'FAIL'}</span></td>`;
-        if (typeof v === 'number') return `<td>${v.toFixed(3)}</td>`;
-        return `<td>${v ?? '—'}</td>`;
-      }).join('') + '</tr>').join('')}</tbody></table>`;
-    sec.appendChild(wrap);
-  }
-
-  // New search
-  const nb = document.createElement('button');
-  nb.className = 'new-search-btn';
-  nb.textContent = '← New search';
-  nb.onclick = () => {
-    sec.style.display = 'none';
-    document.getElementById('disease-input').value = '';
-    document.getElementById('disease-input').classList.remove('error','warn');
-    clearMsg();
-    window.scrollTo({top:0, behavior:'smooth'});
-  };
-  sec.appendChild(nb);
-  sec.scrollIntoView({behavior:'smooth', block:'start'});
-}
-
-// ── SHAP ──
-function renderShap(prop) {
-  if (!currentResults?.shap?.[prop]) return;
-  const vals   = currentResults.shap[prop];
-  const max    = Math.max(...Object.values(vals));
-  const grid   = document.getElementById('shap-grid');
-  if (!grid) return;
-  grid.innerHTML = Object.entries(vals).sort((a,b) => b[1]-a[1]).map(([feat, val]) => `
-    <div class="shap-row">
-      <div class="shap-feat">${feat}</div>
-      <div class="shap-track"><div class="shap-fill" style="width:${max>0?(val/max*100).toFixed(1):0}%"></div></div>
-      <div class="shap-val">${val.toFixed(5)}</div>
-    </div>`).join('');
-}
-
-// ── HEATMAP ──
-function renderHeatmap(corr, sec) {
-  // corr is now a dict: {pearson, pearson_p, spearman, spearman_p, significance, vif}
-  const isPearsonObj = corr && typeof corr === 'object' && corr.pearson;
-  const pearsonData = isPearsonObj ? corr.pearson : corr;
-  const sigData     = isPearsonObj ? corr.significance : null;
-  const spearData   = isPearsonObj ? corr.spearman : null;
-  const vifData     = isPearsonObj ? corr.vif : null;
-
-  const indices = Object.keys(pearsonData || {});
-  const props   = Object.keys((pearsonData[indices[0]]) || {});
-  if (!indices.length || !props.length) return;
-
-  function clr(v) {
-    const a = Math.abs(v);
-    return v >= 0
-      ? `rgba(74,${Math.round(160+a*80)},${Math.round(130+a*50)},${0.15+a*0.55})`
-      : `rgba(240,${Math.round(100+a*40)},96,${0.15+a*0.55})`;
-  }
-
-  // Pearson heatmap with significance
-  const wrap = document.createElement('div');
-  wrap.className = 'heatmap-wrap fade-in';
-
-  const tabHead = `<tr><th style="text-align:left;padding-right:12px">Index</th>${props.map(p=>`<th>${p}</th>`).join('')}</tr>`;
-  const tabBody = indices.map(idx => {
-    const cells = props.map(p => {
-      const v   = parseFloat(pearsonData[idx]?.[p] ?? 0);
-      const sig = sigData ? (sigData[idx]?.[p] ?? '') : '';
-      return `<td style="background:${clr(v)}" title="r=${v.toFixed(3)} ${sig}">${v.toFixed(2)}<sup style="font-size:9px">${sig}</sup></td>`;
-    }).join('');
-    return `<tr><th class="row-label">${idx}</th>${cells}</tr>`;
-  }).join('');
-
-  let html = `<div style="margin-bottom:6px;font-size:11px;color:var(--muted)">
-    Pearson r — significance: <strong style="color:var(--text)">***</strong> p&lt;0.001 &nbsp;
-    <strong style="color:var(--text)">**</strong> p&lt;0.01 &nbsp;
-    <strong style="color:var(--text)">*</strong> p&lt;0.05 &nbsp; ns = not significant
+    <div class="sh"><h2>Statistical <em>analysis</em></h2><div class="sh-line"></div></div>
+    <div class="cgrid c2">
+      <div class="card"><div class="clabel">Pearson correlation + p-values</div><div class="cbody">Pearson r with two-tailed p-values for every index–property pair. Significance: *** p&lt;0.001 · ** p&lt;0.01 · * p&lt;0.05 · ns.</div></div>
+      <div class="card"><div class="clabel">Spearman correlation</div><div class="cbody">Non-parametric rank-based correlation — detects monotonic non-linear relationships that Pearson misses.</div></div>
+      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">Variance Inflation Factor for all 39 indices. VIF&lt;5 = low, 5–10 = moderate, &gt;10 = high (redundant index).</div></div>
+      <div class="card"><div class="clabel">SHAP explanations</div><div class="cbody">SHapley Additive exPlanations for the best model per property — shows exactly which index drives each prediction.</div></div>
+    </div>
   </div>
-  <table class="heatmap-table"><thead>${tabHead}</thead><tbody>${tabBody}</tbody></table>`;
+</div>
 
-  // Spearman section
-  if (spearData) {
-    const spearBody = indices.map(idx => {
-      const cells = props.map(p => {
-        const v = parseFloat(spearData[idx]?.[p] ?? 0);
-        return `<td style="background:${clr(v)}">${v.toFixed(2)}</td>`;
-      }).join('');
-      return `<tr><th class="row-label">${idx}</th>${cells}</tr>`;
-    }).join('');
-    html += `<div style="margin:20px 0 6px;font-size:11px;color:var(--muted);font-weight:500">Spearman ρ (non-parametric)</div>
-    <table class="heatmap-table"><thead>${tabHead}</thead><tbody>${spearBody}</tbody></table>`;
+<!-- ═══════════════════════════════════════════ PAGE: HOW TO USE ═══ -->
+<div id="pg-howto" class="pg">
+  <div class="wrap">
+    <div style="padding-bottom:32px;margin-bottom:32px;border-bottom:1px solid var(--border)">
+      <div class="eyebrow">Documentation</div>
+      <div class="display">How to <em>use</em></div>
+      <div class="lead">MolecuLens runs a fully automated pipeline from disease name to publication-ready results.</div>
+    </div>
+
+    <div class="sh"><h2>Running the <em>pipeline</em></h2><div class="sh-line"></div></div>
+    <div class="hsteps">
+      <div class="hstep"><div class="hnum">1</div><div><div class="htitle">Enter a disease name</div><div class="hdesc">Type any disease on the Pipeline tab — diabetes, hypertension, alzheimer, cancer, asthma, epilepsy, parkinson, rheumatoid arthritis, etc. Typos are handled automatically: "diabtes" suggests "diabetes". The system validates against a curated MeSH disease list and probes ChEMBL for drug availability before starting the pipeline.</div></div></div>
+      <div class="hstep"><div class="hnum">2</div><div><div class="htitle">Wait for the pipeline to complete</div><div class="hdesc">The first run of a disease takes 20–45 minutes — it fetches up to 100 real drugs from 4 APIs, computes 39 topological indices per molecule, and trains 11 ML models with 5-fold cross-validation. Do not close or refresh the browser tab. The same disease searched again returns instantly (&lt;1 second) from the results cache.</div></div></div>
+      <div class="hstep"><div class="hnum">3</div><div><div class="htitle">Explore results across 7 tabs</div><div class="hdesc">Results are displayed in 7 tabs in the exact order the pipeline ran: <strong style="color:var(--text)">Drug Properties</strong> (all physicochemical + ADMET data) → <strong style="color:var(--text)">Drug-likeness Filters</strong> (Lipinski, Veber, PAINS) → <strong style="color:var(--text)">Topological Indices</strong> (all 39 per drug) → <strong style="color:var(--text)">Correlation Analysis</strong> (Pearson + Spearman + VIF) → <strong style="color:var(--text)">ML Performance</strong> (all 11 models + best per property) → <strong style="color:var(--text)">SHAP Importance</strong> (feature importance per property) → <strong style="color:var(--text)">Data Preview</strong> (first 10 drugs, all columns).</div></div></div>
+      <div class="hstep"><div class="hnum">4</div><div><div class="htitle">Download your data</div><div class="hdesc">Two download buttons appear: <strong style="color:var(--text)">CSV</strong> (all drugs × all properties, raw data, every column) and <strong style="color:var(--text)">Excel (7 sheets)</strong> — Drug Data, ML Results, Best Models, SHAP Importance, Correlation (Pearson + Spearman + VIF with colour-coded heatmap), and Index Definitions with full formulas ready for citation.</div></div></div>
+    </div>
+
+    <div class="sh"><h2>Understanding the <em>results</em></h2><div class="sh-line"></div></div>
+    <div class="cgrid c2" style="margin-bottom:32px">
+      <div class="card"><div class="clabel">R² (coefficient of determination)</div><div class="cbody">How well topological indices predict the property. R²=1 is perfect, R²=0 is no better than random. Values above 0.7 are considered strong for QSPR research. R² std (± column) shows stability across CV folds — lower is better.</div></div>
+      <div class="card"><div class="clabel">MAE (mean absolute error)</div><div class="cbody">Average prediction error in the property's own units. Lower is better. Compare MAE only across models for the same property, not across different properties (units differ).</div></div>
+      <div class="card"><div class="clabel">SHAP values</div><div class="cbody">Mean absolute SHAP value per topological index. Higher = that index contributes more to the prediction. Positive values push predictions up; negative push them down. Use to identify which structural features matter.</div></div>
+      <div class="card"><div class="clabel">Pearson r + p-values</div><div class="cbody">*** = highly significant (p&lt;0.001). A high |r| with low p-value means the relationship is both strong and statistically reliable. Spearman ρ catches non-linear monotonic trends Pearson misses.</div></div>
+      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">VIF &lt;5: indices are independent. 5–10: moderate overlap. &gt;10: two indices carry essentially the same structural information — removing one won't hurt ML performance.</div></div>
+      <div class="card"><div class="clabel">Drug-likeness filters</div><div class="cbody">Lipinski pass = likely good oral bioavailability. Veber pass = additional oral absorption constraint. PAINS pass = no problematic substructures that cause false positives in biological assays.</div></div>
+    </div>
+
+    <div class="sh"><h2>Tips and <em>notes</em></h2><div class="sh-line"></div></div>
+    <div class="card">
+      <div class="cbody" style="display:flex;flex-direction:column;gap:10px">
+        <div>🔄 <strong style="color:var(--text)">Repeat searches are instant</strong> — results are cached after the first run. Share the link and others get instant results for diseases already analysed.</div>
+        <div>⏳ <strong style="color:var(--text)">Do not close the tab</strong> while running. The job runs on the server, but the browser polls for completion every 5 seconds.</div>
+        <div>📊 <strong style="color:var(--text)">More drugs = better ML</strong> — diseases with many ChEMBL entries (diabetes, hypertension, cancer) give more statistically reliable QSPR results.</div>
+        <div>🧬 <strong style="color:var(--text)">Sparse bioactivity</strong> — BIO_IC50, BIO_Ki etc. are often null. ChEMBL only has experimental data for a fraction of drugs per disease. This is normal and expected.</div>
+        <div>📥 <strong style="color:var(--text)">Excel workbook is publication-ready</strong> — the Correlation sheet has colour-coded heatmaps baked into cells, and the Index Definitions sheet has all formulas for direct citation.</div>
+        <div>🔬 <strong style="color:var(--text)">ADMET fallback</strong> — if pkCSM is unavailable, RDKit-estimated ADMET properties are computed locally (marked ADMET_Source = RDKit_fallback).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ PAGE: CONTACT ═══ -->
+<div id="pg-contact" class="pg">
+  <div class="wrap">
+    <div style="padding-bottom:32px;margin-bottom:32px;border-bottom:1px solid var(--border)">
+      <div class="eyebrow">Get in touch</div>
+      <div class="display">Contact the <em>author</em></div>
+      <div class="lead">For questions, bug reports, collaboration enquiries, or to cite this tool in research.</div>
+    </div>
+
+    <div class="sh"><h2>Author <em>contact</em></h2><div class="sh-line"></div></div>
+    <div class="ccard" style="margin-bottom:36px">
+      <div class="cname">Advik Natarajan</div>
+      <div class="crole">Developer · MolecuLens Drug QSPR Pipeline</div>
+      <div class="crow">
+        <svg class="cico" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 4l7 5 7-5"/></svg>
+        <a href="mailto:gcap733@gmail.com">gcap733@gmail.com</a>
+      </div>
+      <div class="crow">
+        <svg class="cico" viewBox="0 0 16 16"><path d="M8 1C4.1 1 1 4.1 1 8c0 3.1 2 5.7 4.7 6.6.3.1.5-.2.5-.4v-1.4c-1.9.4-2.3-.9-2.3-.9-.3-.8-.8-1-.8-1s.6.5 1 1.3c.5 1.1 1.5.8 1.9.6.1-.5.3-.8.6-1C7 11.5 5.4 10.9 5.4 8.3c0-.7.3-1.4.7-1.9-.1-.2-.3-1 .1-2 0 0 .6-.2 1.9.7.5-.2 1.1-.2 1.6-.2s1.1.1 1.6.2c1.3-.9 1.9-.7 1.9-.7.4 1 .2 1.8.1 2 .4.5.7 1.2.7 1.9 0 2.6-1.6 3.2-3.1 3.4.2.2.4.6.4 1.3v1.9c0 .2.2.5.5.4C13 13.7 15 11.1 15 8c0-3.9-3.1-7-7-7z"/></svg>
+        <a href="https://github.com/gcap733-bit/moleculens" target="_blank">github.com/gcap733-bit/moleculens</a>
+      </div>
+    </div>
+
+    <div class="sh"><h2>Bug reports and <em>feedback</em></h2><div class="sh-line"></div></div>
+    <div class="card" style="max-width:600px">
+      <div class="cbody">When reporting a bug, please include: the disease name you searched, the error message shown, and the approximate time of the run. This helps identify specific pipeline failures.<br><br>Feature requests and research collaboration enquiries are also welcome via email.</div>
+    </div>
+
+    <div class="sh"><h2>Citing <em>MolecuLens</em></h2><div class="sh-line"></div></div>
+    <div class="card" style="max-width:600px;font-family:var(--mono);font-size:11px;color:var(--text2);line-height:1.8">
+      Natarajan, A. MolecuLens: An Automated Drug QSPR Pipeline Using Topological Indices and Machine Learning. Available at: web-production-97e1c.up.railway.app
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>MolecuLens — Drug QSPR Pipeline</span>
+  <span>ChEMBL · PubChem · pkCSM · UniChem</span>
+</footer>
+
+<script>
+const API='';
+let pollTimer=null,curJobId=null,curResults=null;
+const SEGC=['#00e5a0','#3d9bff','#f5c842','#ff5c5c','#a78bfa'];
+const STEPS=['ps0','ps1','ps2','ps3','ps4'];
+const STEP_SEG={'ps0':0,'ps1':1,'ps2':2,'ps3':3,'ps4':4};
+
+/* PAGE NAV */
+function showPg(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  document.querySelectorAll('.nav-btn').forEach(b=>{if(b.dataset.pg===id)b.classList.add('on');});
+  window.scrollTo({top:0});
+}
+
+/* BACKEND CHECK */
+window.addEventListener('load',async()=>{
+  document.getElementById('api-lbl').textContent=window.location.origin||'localhost:8000';
+  try{
+    const r=await fetch(`${API}/health`,{signal:AbortSignal.timeout(5000)});
+    if(!r.ok)throw 0;
+    setMsg('Backend connected — enter a disease to begin.','ok');
+    setTimeout(clearMsg,3000);
+  }catch{
+    document.getElementById('bban').classList.add('on');
+    document.getElementById('di').disabled=true;
+    document.getElementById('rbtn').disabled=true;
+  }
+});
+
+document.getElementById('di').addEventListener('keydown',e=>{if(e.key==='Enter')handleRun();});
+
+/* HELPERS */
+function setMsg(t,type){const el=document.getElementById('mbox');el.textContent=t;el.className='mbox on '+type;}
+function clearMsg(){document.getElementById('mbox').className='mbox';}
+function setBtn(d,l){const b=document.getElementById('rbtn');b.disabled=d;b.textContent=l??(d?'Running...':'Analyse →');}
+function showPills(list){
+  const box=document.getElementById('pill-box');box.innerHTML='';
+  list.forEach(s=>{const p=document.createElement('button');p.className='pill';p.textContent=s;
+    p.onclick=()=>{document.getElementById('di').value=s;box.innerHTML='';clearMsg();handleRun();};
+    box.appendChild(p);});
+}
+function fmt(v,d=3){return v!=null&&v!==''&&!isNaN(v)?Number(v).toFixed(d):'—';}
+
+/* VALIDATE + RUN */
+async function handleRun(){
+  const raw=document.getElementById('di').value.trim();
+  if(!raw){setMsg('Please enter a disease name.','er');return;}
+  clearMsg();showPills([]);
+  document.getElementById('di').classList.remove('err','wrn');
+  setBtn(true);
+  let v;
+  try{
+    const r=await fetch(`${API}/validate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({disease:raw}),signal:AbortSignal.timeout(10000)});
+    v=await r.json();
+  }catch{setMsg('Cannot reach backend. Is the server running?','er');setBtn(false,'Analyse →');return;}
+  if(!v.valid){
+    document.getElementById('di').classList.add('err');
+    if(v.errors?.length)setMsg(v.errors[0],'er');
+    if(v.suggestions?.length)showPills(v.suggestions);
+    setBtn(false,'Analyse →');return;
+  }
+  if(v.warnings?.length){document.getElementById('di').classList.add('wrn');setMsg(v.warnings[0],'wn');}
+  runPipeline(v.disease||raw,!!v.warnings?.length);
+}
+
+async function runPipeline(disease,force){
+  showProgress(disease);
+  let jobId;
+  try{
+    const r=await fetch(`${API}/run`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({disease,force_proceed:force}),signal:AbortSignal.timeout(12000)});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.detail?.errors?.[0]||'Failed to start.');}
+    const d=await r.json();jobId=d.job_id;curJobId=jobId;
+  }catch(e){hideProgress();setMsg(e.message,'er');setBtn(false,'Analyse →');return;}
+  beginPoll(jobId);
+}
+
+/* POLLING */
+function beginPoll(jobId){
+  if(pollTimer)clearInterval(pollTimer);
+  const TIMES=[0,35,65,95,130];
+  let si=0,elapsed=0;
+  advStep(STEPS[0]);
+  pollTimer=setInterval(async()=>{
+    elapsed+=5;
+    const due=Math.min(TIMES.filter(t=>elapsed>=t).length-1,STEPS.length-1);
+    if(due>si){markDone(STEPS[si]);si=due;advStep(STEPS[si]);}
+    try{
+      const r=await fetch(`${API}/status/${jobId}`,{signal:AbortSignal.timeout(6000)});
+      const d=await r.json();
+      document.getElementById('prog-stat').textContent=d.status+'...';
+      if(d.status==='complete'){
+        clearInterval(pollTimer);
+        STEPS.forEach(s=>markDone(s));
+        document.getElementById('pbar').classList.add('done');
+        try{
+          const rr=await fetch(`${API}/results/${jobId}`);
+          if(!rr.ok)throw new Error('HTTP '+rr.status);
+          const results=await rr.json();
+          showResults(results,jobId);
+        }catch(e){hideProgress();setMsg('Pipeline finished but results failed to load: '+e.message,'er');setBtn(false,'Analyse →');}
+      }else if(d.status==='failed'){
+        clearInterval(pollTimer);hideProgress();
+        setMsg('Pipeline failed: '+(d.error||'Check server logs.'),'er');setBtn(false,'Analyse →');
+      }
+    }catch{}
+  },5000);
+}
+
+/* PROGRESS UI */
+function showProgress(disease){
+  if(pollTimer)clearInterval(pollTimer);
+  document.getElementById('prog-dis').textContent=disease;
+  document.getElementById('prog-sec').style.display='block';
+  document.getElementById('res-sec').style.display='none';
+  document.getElementById('pbar').classList.remove('done');
+  STEPS.forEach(s=>{const el=document.getElementById(s);if(el)el.className='pstep';});
+  for(let i=0;i<5;i++){const s=document.getElementById('sg'+i);if(s){s.style.cssText='flex:1;height:5px;border-radius:3px;background:var(--border2);transition:background .4s';}}
+  document.getElementById('prog-stat').textContent='Starting...';
+}
+function hideProgress(){document.getElementById('prog-sec').style.display='none';}
+function advStep(id){
+  const el=document.getElementById(id);if(el)el.className='pstep on';
+  const idx=STEP_SEG[id];
+  const seg=document.getElementById('sg'+idx);
+  if(seg){seg.style.background=SEGC[idx];seg.style.animation='pseg 1s ease-in-out infinite';seg.style.boxShadow=`0 0 8px ${SEGC[idx]}88`;}
+  const lbl={'ps0':'Fetching drug data...','ps1':'Applying filters...','ps2':'Computing 39 indices...','ps3':'Training 11 ML models...','ps4':'SHAP + exporting...'};
+  document.getElementById('prog-stat').textContent=lbl[id]||'Running...';
+}
+function markDone(id){
+  const el=document.getElementById(id);if(el){el.className='pstep dn';const ico=el.querySelector('.pstep-ico');if(ico)ico.textContent='✓';}
+  const idx=STEP_SEG[id];
+  const seg=document.getElementById('sg'+idx);
+  if(seg){seg.style.animation='none';seg.style.background=SEGC[idx];seg.style.boxShadow='none';seg.style.opacity='.65';}
+}
+
+/* SHOW RESULTS */
+const TABS=[
+  {id:'props',   lbl:'1 · Drug Properties'},
+  {id:'filters', lbl:'2 · Drug-likeness'},
+  {id:'indices', lbl:'3 · Topo Indices'},
+  {id:'corr',    lbl:'4 · Correlation'},
+  {id:'ml',      lbl:'5 · ML Performance'},
+  {id:'shap',    lbl:'6 · SHAP'},
+  {id:'preview', lbl:'7 · Data Preview'},
+];
+
+function showResults(data,jobId){
+  hideProgress();setBtn(false,'Analyse →');clearMsg();curResults=data;
+  const n=data.drug_count||1;
+
+  document.getElementById('res-ttl').innerHTML=`Results for <em style="font-style:italic;color:var(--accent)">${data.disease}</em>`;
+  document.getElementById('res-meta').textContent=`${data.drug_count} drugs analysed · ${data.columns?.length||0} properties per drug`;
+
+  /* Downloads */
+  document.getElementById('dlrow').innerHTML=`
+    <a class="dlbtn" href="${API}/download/${jobId}" download><svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>Download CSV</a>
+    <a class="dlbtn bl" href="${API}/download-excel/${jobId}" download><svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>Excel (7 sheets)</a>`;
+
+  /* Stat cards */
+  const lip=Math.round((data.lipinski_pass||0)/n*100);
+  const veb=Math.round((data.veber_pass||0)/n*100);
+  const pai=Math.round((data.pains_pass||0)/n*100);
+  const bestR2=data.top_models?.length?Math.max(...data.top_models.map(m=>m.R2_mean||0)).toFixed(3):'—';
+  document.getElementById('stat-grid').innerHTML=`
+    <div class="card"><div class="clabel">Drugs analysed</div><div class="cval ac">${data.drug_count}</div></div>
+    <div class="card"><div class="clabel">Best R²</div><div class="cval">${bestR2}</div></div>
+    <div class="card"><div class="clabel">Lipinski pass</div><div class="cval">${lip}<span style="font-size:16px;color:var(--text3)">%</span></div><div class="csub">${data.lipinski_pass||0} of ${n}</div></div>
+    <div class="card"><div class="clabel">PAINS clean</div><div class="cval">${pai}<span style="font-size:16px;color:var(--text3)">%</span></div><div class="csub">${data.pains_pass||0} of ${n}</div></div>`;
+
+  /* Build tabs */
+  const tabsEl=document.getElementById('rtabs');
+  const pansEl=document.getElementById('rpans');
+  tabsEl.innerHTML='';pansEl.innerHTML='';
+  TABS.forEach((tab,i)=>{
+    const btn=document.createElement('button');
+    btn.className='rtab'+(i===0?' on':'');
+    btn.textContent=tab.lbl;
+    btn.onclick=()=>{
+      document.querySelectorAll('.rtab').forEach(t=>t.classList.remove('on'));
+      document.querySelectorAll('.rpan').forEach(p=>p.classList.remove('on'));
+      btn.classList.add('on');
+      document.getElementById('rp-'+tab.id).classList.add('on');
+    };
+    tabsEl.appendChild(btn);
+    const pan=document.createElement('div');
+    pan.className='rpan'+(i===0?' on':'');
+    pan.id='rp-'+tab.id;
+    pansEl.appendChild(pan);
+  });
+
+  buildProps(data);
+  buildFilters(data,n);
+  buildIndices(data);
+  buildCorr(data);
+  buildML(data);
+  buildSHAP(data);
+  buildPreview(data);
+
+  document.getElementById('res-sec').style.display='block';
+  document.getElementById('res-sec').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* TAB 1: Drug Properties */
+function buildProps(data){
+  const el=document.getElementById('rp-props');
+  const preview=data.drugs_preview||[];
+  if(!preview.length){el.innerHTML='<div class="card"><div class="cbody">No property data available.</div></div>';return;}
+  const cols=data.columns||[];
+  const groups=[
+    ['RDKit computed properties (from SMILES)',['MolWt','LogP','TPSA','HBD','HBA','RotBonds','MolMR']],
+    ['PubChem physicochemical properties',cols.filter(c=>c.startsWith('PC_'))],
+    ['ADMET pharmacokinetic properties (pkCSM / RDKit fallback)',cols.filter(c=>c.startsWith('ADMET_'))],
+    ['Bioactivity — experimental (ChEMBL)',['BIO_IC50','BIO_Ki','BIO_EC50','BIO_Kd']],
+    ['Cross-database identifiers (UniChem)',cols.filter(c=>c.startsWith('UC_')).concat(['InChIKey'])],
+  ];
+  let html='<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Showing first 10 drugs. Each group corresponds to a different data source fetched during Step 1.</div>';
+  groups.forEach(([name,gcols])=>{
+    const avail=gcols.filter(c=>cols.includes(c));
+    if(!avail.length)return;
+    const hasData=avail.filter(c=>preview.some(r=>r[c]!=null&&r[c]!==''));
+    html+=`<div class="slabel">${name} — ${avail.length} properties (${hasData.length} with data in preview)</div>
+    <div class="tw"><table><thead><tr><th>ChEMBL ID</th>${avail.map(c=>`<th>${c.replace(/^(PC_|ADMET_|BIO_|UC_)/,'').replace(/_/g,' ')}</th>`).join('')}</tr></thead><tbody>`;
+    preview.forEach(row=>{
+      html+=`<tr><td class="tbl" style="white-space:nowrap">${row.ChEMBL_ID||'—'}</td>`;
+      avail.forEach(c=>{
+        const v=row[c];
+        if(v===null||v===undefined||v==='')html+='<td class="tmt">—</td>';
+        else if(typeof v==='number')html+=`<td>${fmt(v)}</td>`;
+        else html+=`<td>${v}</td>`;
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+  });
+  el.innerHTML=html;
+}
+
+/* TAB 2: Filters */
+function buildFilters(data,n){
+  const el=document.getElementById('rp-filters');
+  const preview=data.drugs_preview||[];
+  const lip=data.lipinski_pass||0,veb=data.veber_pass||0,pai=data.pains_pass||0;
+  let html=`
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Three standard medicinal chemistry filters applied to every drug.</div>
+    <div class="cgrid c3" style="margin-bottom:24px">
+      <div class="card">
+        <div class="clabel">Lipinski Rule of Five</div>
+        <div class="cval ac">${Math.round(lip/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
+        <div class="csub">${lip} / ${n} drugs pass</div>
+        <div class="cbody" style="margin-top:10px;font-size:11px">MW≤500 · LogP≤5 · HBD≤5 · HBA≤10<br>Predicts good oral bioavailability</div>
+      </div>
+      <div class="card">
+        <div class="clabel">Veber Rules</div>
+        <div class="cval bl">${Math.round(veb/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
+        <div class="csub">${veb} / ${n} drugs pass</div>
+        <div class="cbody" style="margin-top:10px;font-size:11px">RotBonds≤10 · TPSA≤140 Å²<br>Additional oral absorption filter</div>
+      </div>
+      <div class="card">
+        <div class="clabel">PAINS clean</div>
+        <div class="cval yl">${Math.round(pai/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
+        <div class="csub">${pai} / ${n} drugs</div>
+        <div class="cbody" style="margin-top:10px;font-size:11px">No pan-assay interference substructures<br>Important for assay credibility</div>
+      </div>
+    </div>
+    <div class="slabel">Per-drug filter results (first 10 drugs)</div>
+    <div class="tw"><table><thead><tr><th>ChEMBL ID</th><th>MolWt</th><th>LogP</th><th>TPSA</th><th>HBD</th><th>HBA</th><th>RotBonds</th><th>Lipinski</th><th>Veber</th><th>PAINS</th></tr></thead><tbody>`;
+  preview.forEach(r=>{
+    html+=`<tr>
+      <td class="tbl" style="white-space:nowrap">${r.ChEMBL_ID||'—'}</td>
+      <td>${fmt(r.MolWt,1)}</td><td>${fmt(r.LogP,2)}</td><td>${fmt(r.TPSA,1)}</td>
+      <td>${r.HBD??'—'}</td><td>${r.HBA??'—'}</td><td>${r.RotBonds??'—'}</td>
+      <td><span class="bx ${r.Lipinski_Pass?'pass':'fail'}">${r.Lipinski_Pass?'PASS':'FAIL'}</span></td>
+      <td><span class="bx ${r.Veber_Pass?'pass':'fail'}">${r.Veber_Pass?'PASS':'FAIL'}</span></td>
+      <td><span class="bx ${r.PAINS_Pass?'pass':'fail'}">${r.PAINS_Pass?'PASS':'FAIL'}</span></td>
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+
+/* TAB 3: Topological Indices */
+function buildIndices(data){
+  const el=document.getElementById('rp-indices');
+  const preview=data.drugs_preview||[];
+  const cols=data.columns||[];
+  const fams=[
+    ['Original degree-based (9)',['M1','M2','ABC','R','H','F','AZI','GA','SC']],
+    ['New degree-based (11)',['BM','TM','GH','GBM','GTM','HG','BMG','BMH','TMG','TMH','SDD']],
+    ['Reverse-degree (9) — rd(v)=n+1−d(v)',['RM1','RM2','RABC','RR','RH','RF','RGA','RBM','RSDD']],
+    ['Degree-sum (5) — weight=d(u)+d(v)',['DS1','DS2','DSR','DSH','DSGA']],
+    ['Distance-based (5)',['W','J','Z','Sz','GE']],
+  ];
+  let html='<div style="font-size:12px;color:var(--text3);margin-bottom:16px">39 topological indices computed per molecule from the molecular graph (atoms=vertices, bonds=edges). Showing first 10 drugs.</div>';
+  fams.forEach(([name,fcols])=>{
+    const avail=fcols.filter(c=>cols.includes(c));
+    if(!avail.length)return;
+    html+=`<div class="slabel">${name}</div>
+    <div class="tw"><table><thead><tr><th>ChEMBL ID</th>${avail.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    preview.forEach(r=>{
+      html+=`<tr><td class="tbl" style="white-space:nowrap">${r.ChEMBL_ID||'—'}</td>`;
+      avail.forEach(c=>html+=`<td>${r[c]!=null?fmt(r[c]):'—'}</td>`);
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+  });
+  el.innerHTML=html;
+}
+
+/* TAB 4: Correlation */
+function buildCorr(data){
+  const el=document.getElementById('rp-corr');
+  const corr=data.correlation;
+  if(!corr){el.innerHTML='<div class="card"><div class="cbody">No correlation data available.</div></div>';return;}
+  const isPO=corr&&typeof corr==='object'&&corr.pearson;
+  const pd=isPO?corr.pearson:corr;
+  const sd=isPO?corr.significance:null;
+  const spd=isPO?corr.spearman:null;
+  const vd=isPO?corr.vif:null;
+  const idxs=Object.keys(pd||{});
+  const props=idxs.length?Object.keys(pd[idxs[0]]||{}):[];
+
+  function clr(v){
+    const a=Math.abs(v||0);
+    return (v||0)>=0?`rgba(0,${Math.round(150+a*80)},${Math.round(90+a*60)},${0.1+a*0.55})`:`rgba(255,${Math.round(70+a*40)},92,${0.1+a*0.55})`;
+  }
+  function hmap(dobj,sobj,title){
+    if(!dobj||!Object.keys(dobj).length)return'';
+    const ii=Object.keys(dobj),pp=Object.keys(dobj[ii[0]]||{});
+    return `<div class="slabel" style="margin-top:20px">${title}</div>
+    <div class="hmw"><table class="hmt"><thead><tr><th></th>${pp.map(p=>`<th>${p}</th>`).join('')}</tr></thead><tbody>
+    ${ii.map(idx=>`<tr><th class="hmlbl">${idx}</th>${pp.map(p=>{
+      const v=parseFloat(dobj[idx]?.[p]||0);
+      const sig=sobj?sobj[idx]?.[p]||'':'';
+      return `<td style="background:${clr(v)}" title="${idx}→${p}: r=${v.toFixed(3)} ${sig}">${v.toFixed(2)}<sup style="font-size:8px;opacity:.7">${sig}</sup></td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table></div>`;
   }
 
-  // VIF table
-  if (vifData && Object.keys(vifData).length) {
-    const vifRows = Object.entries(vifData).map(([idx, val]) => {
-      const v = val === null ? 'N/A' : parseFloat(val).toFixed(2);
-      const flag = val === null ? '' : val < 5 ? '✅ Low' : val < 10 ? '⚠️ Moderate' : '❌ High';
-      return `<tr><td>${idx}</td><td>${v}</td><td style="color:var(--muted)">${flag}</td></tr>`;
-    }).join('');
-    html += `<div style="margin:20px 0 6px;font-size:11px;color:var(--muted);font-weight:500">Variance Inflation Factor (VIF) — Multicollinearity</div>
-    <table class="heatmap-table" style="text-align:left">
-      <thead><tr><th>Index</th><th>VIF</th><th>Interpretation</th></tr></thead>
-      <tbody>${vifRows}</tbody>
-    </table>
-    <div style="margin-top:6px;font-size:10px;color:var(--muted)">VIF &lt; 5: low multicollinearity &nbsp; 5-10: moderate &nbsp; &gt;10: high (consider removing)</div>`;
-  }
+  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:4px">Pearson r and Spearman ρ between all 39 topological indices and all predicted properties. Colour: green=positive, red=negative.</div>
+  <div class="leg"><span>*** p&lt;0.001</span><span>** p&lt;0.01</span><span>* p&lt;0.05</span><span>ns = not significant</span></div>`;
+  html+=hmap(pd,sd,'Pearson correlation (r) with significance stars');
+  if(spd)html+=hmap(spd,null,'Spearman correlation (ρ) — non-parametric');
 
-  wrap.innerHTML = html;
-  sec.appendChild(wrap);
+  if(vd&&Object.keys(vd).length){
+    html+=`<div class="slabel" style="margin-top:20px">Variance Inflation Factor (VIF) — multicollinearity among 39 topological indices</div>
+    <div class="tw"><table><thead><tr><th>Index</th><th>VIF</th><th>Interpretation</th></tr></thead><tbody>`;
+    Object.entries(vd).forEach(([idx,val])=>{
+      const v=val==null?null:parseFloat(val);
+      const flag=v==null?'—':v<5?'✅ Low — independent':v<10?'⚠️ Moderate — some overlap':'❌ High — consider removing';
+      const c=v==null?'':v<5?'var(--accent)':v<10?'var(--yellow)':'var(--red)';
+      html+=`<tr><td class="tbl">${idx}</td><td style="color:${c}">${v==null?'N/A':v.toFixed(2)}</td><td class="tmt">${flag}</td></tr>`;
+    });
+    html+=`</tbody></table></div><div style="font-size:11px;color:var(--text3);margin-top:-16px;margin-bottom:20px">VIF &lt;5: independent · 5–10: moderate overlap · &gt;10: redundant with another index</div>`;
+  }
+  el.innerHTML=html;
+}
+
+/* TAB 5: ML Performance */
+function buildML(data){
+  const el=document.getElementById('rp-ml');
+  if(!data.top_models?.length){el.innerHTML='<div class="card"><div class="cbody">No ML results available.</div></div>';return;}
+  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:16px">11 ML models trained per property using 39 topological indices as features. 5-fold cross-validation with GridSearchCV hyperparameter tuning. R² std shows stability across CV folds.</div>
+  <div class="slabel">Best model per property</div>
+  <div class="tw"><table><thead><tr><th>Property</th><th>Best model</th><th>R² mean</th><th>R² std</th><th>MAE</th></tr></thead><tbody>`;
+  data.top_models.forEach(m=>{
+    const r2=m.R2_mean!=null?m.R2_mean.toFixed(3):'—';
+    const std=m.R2_std!=null?m.R2_std.toFixed(3):'—';
+    const mae=m.MAE_mean!=null?m.MAE_mean.toFixed(3):'—';
+    const pct=Math.max(0,Math.min(100,(m.R2_mean||0)*100));
+    html+=`<tr><td>${m.Property}</td><td class="tac">${m.Model}</td>
+      <td><div class="r2w"><div class="r2t"><div class="r2f" style="width:${pct}%"></div></div>${r2}</div></td>
+      <td class="tmt">±${std}</td><td class="tmt">${mae}</td></tr>`;
+  });
+  html+='</tbody></table></div>';
+
+  if(data.ml_results?.length){
+    html+=`<div class="slabel" style="margin-top:24px">All 11 models — full comparison (sorted best→worst per property)</div>
+    <div class="tw"><table><thead><tr><th>Property</th><th>Model</th><th>R² mean</th><th>R² std</th><th>MAE</th></tr></thead><tbody>`;
+    const grouped={};
+    data.ml_results.forEach(m=>{(grouped[m.Property]=grouped[m.Property]||[]).push(m);});
+    Object.entries(grouped).forEach(([prop,models])=>{
+      models.sort((a,b)=>(b.R2_mean||0)-(a.R2_mean||0));
+      models.forEach((m,i)=>{
+        const r2=m.R2_mean!=null?m.R2_mean.toFixed(3):'—';
+        const std=m.R2_std!=null?m.R2_std.toFixed(3):'—';
+        const mae=m.MAE_mean!=null?m.MAE_mean.toFixed(3):'—';
+        html+=`<tr>
+          <td ${i===0?'style="border-top:1px solid var(--border2)"':''}>
+            ${i===0?`<strong style="color:var(--text)">${prop}</strong>`:''}</td>
+          <td ${i===0?'class="tac"':'class="tmt"'}>${m.Model}${i===0?' ★':''}</td>
+          <td>${r2}</td><td class="tmt">±${std}</td><td class="tmt">${mae}</td></tr>`;
+      });
+    });
+    html+='</tbody></table></div>';
+  }
+  el.innerHTML=html;
+}
+
+/* TAB 6: SHAP */
+function buildSHAP(data){
+  const el=document.getElementById('rp-shap');
+  if(!data.shap||!Object.keys(data.shap).length){
+    el.innerHTML='<div class="card"><div class="cbody">SHAP data not available for this run. This can happen when all models fail for a property.</div></div>';return;
+  }
+  const props=Object.keys(data.shap);
+  el.innerHTML=`<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Mean absolute SHAP value per topological index for the best model of each property. Higher = stronger influence. Green bars = positive contribution, red = negative.</div>
+  <select class="ssel" id="shap-sel" onchange="renderSHAP(this.value)">${props.map(p=>`<option value="${p}">${p}</option>`).join('')}</select>
+  <div class="srows" id="shap-rows"></div>`;
+  renderSHAP(props[0]);
+}
+function renderSHAP(prop){
+  if(!curResults?.shap?.[prop])return;
+  const vals=curResults.shap[prop];
+  const max=Math.max(...Object.values(vals).map(v=>Math.abs(v)));
+  const sorted=Object.entries(vals).sort((a,b)=>b[1]-a[1]);
+  const el=document.getElementById('shap-rows');if(!el)return;
+  el.innerHTML=sorted.map(([feat,val])=>{
+    const pct=max>0?(Math.abs(val)/max*100).toFixed(1):0;
+    const col=val>=0?'var(--accent)':'var(--red)';
+    return `<div class="srow"><div class="slbl">${feat}</div><div class="strk"><div class="sfil" style="width:${pct}%;background:${col}"></div></div><div class="sval">${val.toFixed(5)}</div></div>`;
+  }).join('');
+}
+
+/* TAB 7: Data Preview */
+function buildPreview(data){
+  const el=document.getElementById('rp-preview');
+  const preview=data.drugs_preview||[];
+  if(!preview.length){el.innerHTML='<div class="card"><div class="cbody">No data available.</div></div>';return;}
+  const priority=['ChEMBL_ID','SMILES','MolWt','LogP','TPSA','HBD','HBA','RotBonds','PC_XLogP','PC_Complexity','PC_HeavyAtomCount','M1','M2','ABC','R','H','F','W','Sz','GE','Lipinski_Pass','Veber_Pass','PAINS_Pass'];
+  const allCols=Object.keys(preview[0]);
+  const cols=[...priority.filter(c=>allCols.includes(c)),...allCols.filter(c=>!priority.includes(c)&&c!=='SMILES')];
+  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:12px">First 10 drugs · ${cols.length} columns shown · Download CSV or Excel for all ${data.drug_count} drugs and all ${data.columns?.length||0} properties.</div>
+  <div class="tw"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+  preview.forEach(row=>{
+    html+='<tr>';
+    cols.forEach(c=>{
+      const v=row[c];
+      if(['Lipinski_Pass','Veber_Pass','PAINS_Pass'].includes(c))html+=`<td><span class="bx ${v?'pass':'fail'}">${v?'PASS':'FAIL'}</span></td>`;
+      else if(c==='ChEMBL_ID')html+=`<td class="tbl" style="white-space:nowrap">${v||'—'}</td>`;
+      else if(typeof v==='number')html+=`<td>${fmt(v)}</td>`;
+      else html+=`<td style="${c==='SMILES'?'max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap':''}">${v??'—'}</td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+
+/* RESET */
+function doReset(){
+  document.getElementById('res-sec').style.display='none';
+  document.getElementById('di').value='';
+  document.getElementById('di').classList.remove('err','wrn');
+  clearMsg();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 </script>
 </body>
