@@ -390,7 +390,12 @@ def run_ml_qspr(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
     print(f"[*] Running ML with {CV_FOLDS}-fold CV + hyperparameter tuning...")
     X = df[TOPO_INDICES].values
-    available_targets = [t for t in ML_TARGETS if t in df.columns]
+    # Only use targets that exist AND have enough non-null values (>50% filled)
+    available_targets = [
+        t for t in ML_TARGETS
+        if t in df.columns and df[t].notna().sum() >= max(10, len(df) * 0.5)
+    ]
+    print(f"    [*] Predicting {len(available_targets)} properties: {available_targets}")
     kf = KFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
     all_results = []
