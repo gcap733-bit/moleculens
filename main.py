@@ -210,7 +210,7 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     ws6["A1"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
     ws6.merge_cells(f"A1:{get_column_letter(len(props)+1)}1")
 
-    ws6.cell(row=2, column=1, value="Index \ Property")
+    ws6.cell(row=2, column=1, value="Index / Property")
     _style_header(ws6.cell(row=2, column=1))
     for ci, p in enumerate(props, start=2):
         _style_header(ws6.cell(row=2, column=ci, value=p))
@@ -239,7 +239,7 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     spear_row = len(indices_list) + 5
     ws6.cell(row=spear_row, column=1, value="SPEARMAN CORRELATION")
     ws6[f"A{spear_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
-    ws6.cell(row=spear_row+1, column=1, value="Index \ Property")
+    ws6.cell(row=spear_row+1, column=1, value="Index / Property")
     _style_header(ws6.cell(row=spear_row+1, column=1))
     for ci, p in enumerate(props, start=2):
         _style_header(ws6.cell(row=spear_row+1, column=ci, value=p))
@@ -360,7 +360,11 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
 
     df = apply_drug_filters(df)
     df = compute_topological_indices(df)
-    corr_data = run_correlation(df)
+    try:
+        corr_data = run_correlation(df)
+    except Exception as e:
+        print(f"    [!] Correlation failed: {e}")
+        corr_data = {"pearson": {}, "pearson_p": {}, "spearman": {}, "spearman_p": {}, "significance": {}, "vif": {}}
     ml_results, best_models = run_ml_qspr(df)
     try:
         shap_summaries = compute_shap(df, best_models)
@@ -368,11 +372,14 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         print(f"    [!] SHAP failed: {e} — continuing without SHAP")
         shap_summaries = {}
 
-    top_models = (
-        ml_results.sort_values("R2_mean", ascending=False)
-        .drop_duplicates("Property")
-        .reset_index(drop=True)
-    )
+    if ml_results.empty:
+        top_models = pd.DataFrame(columns=["Property","Model","R2_mean","R2_std","MAE_mean"])
+    else:
+        top_models = (
+            ml_results.sort_values("R2_mean", ascending=False)
+            .drop_duplicates("Property")
+            .reset_index(drop=True)
+        )
 
     csv_path      = os.path.join(OUTPUT_DIR, f"{disease}_results.csv")
     xlsx_path     = os.path.join(OUTPUT_DIR, f"{disease}_results.xlsx")
@@ -404,9 +411,9 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
         "ml_results":     ml_results.to_dict(orient="records"),
         "top_models":     top_models.to_dict(orient="records"),
         "shap":           shap_summaries,
-        "lipinski_pass":  int(df["Lipinski_Pass"].sum()),
-        "veber_pass":     int(df["Veber_Pass"].sum()),
-        "pains_pass":     int(df["PAINS_Pass"].eq(True).sum()),
+        "lipinski_pass":  int(df["Lipinski_Pass"].fillna(False).astype(bool).sum()) if "Lipinski_Pass" in df.columns else 0,
+        "veber_pass":     int(df["Veber_Pass"].fillna(False).astype(bool).sum()) if "Veber_Pass" in df.columns else 0,
+        "pains_pass":     int(pd.Series(df["PAINS_Pass"].values).eq(True).sum()) if "PAINS_Pass" in df.columns else 0,
         "csv_path":       csv_path,
         "xlsx_path":      xlsx_path,
         "drugs_preview":  df.head(10).to_dict(orient="records"),
