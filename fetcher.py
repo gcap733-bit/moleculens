@@ -564,4 +564,23 @@ def fetch_all(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
         bio_df = fetch_chembl_bioactivity(df["ChEMBL_ID"].tolist())
         df = df.merge(bio_df, on="ChEMBL_ID", how="left")
 
+    # ── Coerce all non-string columns to numeric where possible ──
+    # This prevents numpy dtype compatibility errors downstream
+    skip_cols = {"ChEMBL_ID", "SMILES", "InChIKey", "PC_MolecularFormula",
+                 "UC_ChEMBL_ID", "UC_DrugBank_ID", "UC_ChemSpider_ID",
+                 "UC_ZINC_ID", "UC_PubChem_SID", "UC_ChEBI_ID",
+                 "UC_BindingDB_ID", "UC_SureChEMBL_ID", "UC_FDA_SRS_ID",
+                 "UC_Comptox_ID", "UC_PubChem_CID_from_IK", "ADMET_Source",
+                 "ADMET_GI_Absorption", "ADMET_BBB_Permeant"}
+    for col in df.columns:
+        if col not in skip_cols:
+            try:
+                converted = pd.to_numeric(df[col], errors='coerce')
+                # Only replace if conversion produced at least some non-NaN values
+                if converted.notna().sum() > 0:
+                    df[col] = converted
+            except Exception:
+                pass
+
+    print(f"    [✓] Fetch complete: {len(df)} drugs, {len(df.columns)} columns.")
     return df
