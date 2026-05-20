@@ -866,7 +866,7 @@ function buildSHAP(data){
 function renderSHAP(prop){
   if(!curResults?.shap?.[prop])return;
   const vals=curResults.shap[prop];
-  const max=Math.max(...Object.values(vals).map(v=>Math.abs(v)));
+  const max=Math.max(1e-9, ...Object.values(vals).map(v=>Math.abs(v)));
   const sorted=Object.entries(vals).sort((a,b)=>b[1]-a[1]);
   const el=document.getElementById('shap-rows');if(!el)return;
   el.innerHTML=sorted.map(([feat,val])=>{

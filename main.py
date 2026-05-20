@@ -208,7 +208,8 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     # Section headers
     ws6.cell(row=1, column=1, value="PEARSON CORRELATION")
     ws6["A1"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
-    ws6.merge_cells(f"A1:{get_column_letter(len(props)+1)}1")
+    if props:
+        ws6.merge_cells(f"A1:{get_column_letter(len(props)+1)}1")
 
     ws6.cell(row=2, column=1, value="Index / Property")
     _style_header(ws6.cell(row=2, column=1))
@@ -239,7 +240,8 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     spear_row = len(indices_list) + 5
     ws6.cell(row=spear_row, column=1, value="SPEARMAN CORRELATION")
     ws6[f"A{spear_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
-    ws6.merge_cells(f"A{spear_row}:{get_column_letter(len(props)+1)}{spear_row}")
+    if props:
+        ws6.merge_cells(f"A{spear_row}:{get_column_letter(len(props)+1)}{spear_row}")
     ws6.cell(row=spear_row+1, column=1, value="Index / Property")
     _style_header(ws6.cell(row=spear_row+1, column=1))
     for ci, p in enumerate(props, start=2):
