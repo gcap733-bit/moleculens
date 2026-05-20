@@ -293,12 +293,112 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 )
                 sz += float(n_u * n_v)
 
+            # ── Advanced Cut-Graph and Distance-based Indices (11 new) ──
+            # 1. W_v (Vertex Wiener): same as Wiener
+            w_v = float(w)
+
+            # 2. W_e (Edge Wiener): shortest paths between all pairs of edges
+            w_e = 0.0
+            bonds = list(mol.GetBonds())
+            num_bonds = len(bonds)
+            for idx1 in range(num_bonds):
+                for idx2 in range(idx1 + 1, num_bonds):
+                    b1 = bonds[idx1]
+                    b2 = bonds[idx2]
+                    u1, v1 = b1.GetBeginAtomIdx(), b1.GetEndAtomIdx()
+                    u2, v2 = b2.GetBeginAtomIdx(), b2.GetEndAtomIdx()
+                    d_min = min(
+                        dist[u1][u2], dist[u1][v2],
+                        dist[v1][u2], dist[v1][v2]
+                    )
+                    if d_min != INF:
+                        w_e += float(d_min + 1)
+
+            # 3. W_ve (Vertex-edge Wiener)
+            w_ve = 0.0
+            for i in range(n):
+                for bond in bonds:
+                    u = bond.GetBeginAtomIdx()
+                    v = bond.GetEndAtomIdx()
+                    d_val = min(dist[i][u], dist[i][v])
+                    if d_val != INF:
+                        w_ve += float(d_val)
+
+            # 4. Sz_v (Vertex Szeged): same as Sz
+            sz_v = float(sz)
+
+            # 5. Sz_e (Edge Szeged), 6. Sz_ve (Vertex-edge Szeged), 7. Mo_v, 8. Mo_e, 9. PI
+            sz_e = 0.0
+            sz_ve = 0.0
+            mo_v = 0.0
+            mo_e = 0.0
+            pi_val = 0.0
+
+            for bond in bonds:
+                u = bond.GetBeginAtomIdx()
+                v = bond.GetEndAtomIdx()
+
+                # n_u, n_v (closer vertices count)
+                n_u = sum(
+                    1 for k2 in range(n)
+                    if dist[u][k2] != INF and dist[v][k2] != INF and dist[u][k2] < dist[v][k2]
+                )
+                n_v = sum(
+                    1 for k2 in range(n)
+                    if dist[u][k2] != INF and dist[v][k2] != INF and dist[v][k2] < dist[u][k2]
+                )
+
+                # m_u, m_v (closer edges count)
+                m_u = 0
+                m_v = 0
+                for f in bonds:
+                    x = f.GetBeginAtomIdx()
+                    y = f.GetEndAtomIdx()
+                    if INF not in (dist[x][u], dist[y][u], dist[x][v], dist[y][v]):
+                        d_f_u = min(dist[x][u], dist[y][u])
+                        d_f_v = min(dist[x][v], dist[y][v])
+                        if d_f_u < d_f_v:
+                            m_u += 1
+                        elif d_f_v < d_f_u:
+                            m_v += 1
+
+                sz_e += float(m_u * m_v)
+                sz_ve += 0.5 * (n_u * m_v + n_v * m_u)
+                mo_v += float(abs(n_u - n_v))
+                mo_e += float(abs(m_u - m_v))
+                pi_val += float(m_u + m_v)
+
+            sz_ve = float(sz_ve)
+
+            # 10. Schultz
+            schultz = 0.0
+            for i in range(n):
+                d_i = degrees[i]
+                for j in range(i + 1, n):
+                    d_j = degrees[j]
+                    d_ij = dist[i][j]
+                    if d_ij != INF:
+                        schultz += float((d_i + d_j) * d_ij)
+
+            # 11. Gutman
+            gutman = 0.0
+            for i in range(n):
+                d_i = degrees[i]
+                for j in range(i + 1, n):
+                    d_j = degrees[j]
+                    d_ij = dist[i][j]
+                    if d_ij != INF:
+                        gutman += float(d_i * d_j * d_ij)
+
             vals = [
                 m1, m2, abc, r, h, f, azi, ga, sc,        # 9 original
                 bm, tm, gh, gbm, gtm, hg, bmg, bmh, tmg, tmh, sdd,  # 11 new
                 rm1, rm2, rabc, rr, rh, rf, rga, rbm, rsdd,  # 9 reverse
                 ds1, ds2, dsr, dsh, dsga,                  # 5 degree-sum
                 w, j_bal, z_hosoya, sz, ge,                # 5 distance
+                w_v, w_e, w_ve, sz_v, sz_e, sz_ve,          # 6 new Wiener & Szeged
+                mo_v, mo_e,                                 # 2 new Mostar
+                pi_val, schultz, gutman,                    # 3 new special
             ]
 
             for k, val in zip(all_keys, vals):
@@ -313,7 +413,7 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
 
     df.dropna(subset=all_keys, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    print(f"    [\u2713] 39 topological indices computed for {len(df)} molecules.")
+    print(f"    [\u2713] 50 topological indices computed for {len(df)} molecules.")
     return df
 
 

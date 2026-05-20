@@ -99,7 +99,7 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
         ("Best Models",      "Best model per property with performance metrics"),
         ("SHAP Importance",  "Feature importance (SHAP values) per property"),
         ("Correlation",      "Pearson correlation matrix — indices vs properties"),
-        ("Topological Index","Definition and formula for all 14 topological indices"),
+        ("Topological Index","Definition and formula for all 50 topological indices"),
     ]
     for i, (name, desc) in enumerate(sheets_info, start=13):
         ws[f"A{i}"] = name
@@ -239,6 +239,7 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     spear_row = len(indices_list) + 5
     ws6.cell(row=spear_row, column=1, value="SPEARMAN CORRELATION")
     ws6[f"A{spear_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
+    ws6.merge_cells(f"A{spear_row}:{get_column_letter(len(props)+1)}{spear_row}")
     ws6.cell(row=spear_row+1, column=1, value="Index / Property")
     _style_header(ws6.cell(row=spear_row+1, column=1))
     for ci, p in enumerate(props, start=2):
@@ -256,6 +257,7 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     vif_row = spear_row + len(indices_list) + 4
     ws6.cell(row=vif_row, column=1, value="VARIANCE INFLATION FACTOR (VIF) — Multicollinearity")
     ws6[f"A{vif_row}"].font = Font(bold=True, color="1F4E79", name="Arial", size=11)
+    ws6.merge_cells(f"A{vif_row}:C{vif_row}")
     ws6.cell(row=vif_row+1, column=1, value="Index")
     ws6.cell(row=vif_row+1, column=2, value="VIF")
     ws6.cell(row=vif_row+1, column=3, value="Interpretation")
@@ -268,8 +270,9 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
         elif vif_val < 10:  interp = "Moderate multicollinearity"
         else:               interp = "High multicollinearity — consider removing"
         ws6.cell(row=ri3, column=3, value=interp).font = Font(name="Arial", size=10)
-        if ri3 % 2 == 0:
-            for ci in [1,2,3]:
+        for ci in [1,2,3]:
+            ws6.cell(row=ri3, column=ci).border = _thin_border()
+            if ri3 % 2 == 0:
                 ws6.cell(row=ri3, column=ci).fill = PatternFill("solid", start_color="EBF3FB")
 
     # Legend
@@ -330,6 +333,20 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
         ("Z",    "Hosoya Z Index",               "Distance",       "Total number of matchings in the molecular graph"),
         ("Sz",   "Szeged Index",                 "Distance",       "Σ n_u(e)·n_v(e) over edges"),
         ("GE",   "Graph Entropy",                "Information",    "-Σ p(d)·log₂(p(d)) Shannon entropy of degrees"),
+        # NEW: Advanced distance-based Wiener variants (6)
+        ("W_v",  "Vertex Wiener",                "Distance",       "Vertex Wiener index, equivalent to W"),
+        ("W_e",  "Edge Wiener",                  "Distance",       "Edge Wiener index based on line graph distances"),
+        ("W_ve", "Vertex-Edge Wiener",           "Distance",       "Mixed Vertex-Edge Wiener index"),
+        ("Sz_v", "Vertex Szeged",                "Distance",       "Vertex Szeged index, equivalent to Sz"),
+        ("Sz_e", "Edge Szeged",                  "Distance",       "Edge Szeged index based on edge partitioning"),
+        ("Sz_ve","Vertex-Edge Szeged",           "Distance",       "Vertex-Edge Szeged index"),
+        # NEW: Mostar indices (2)
+        ("Mo_v", "Vertex Mostar",                "Distance",       "Vertex Mostar index measuring peripheral distance asymmetry"),
+        ("Mo_e", "Edge Mostar",                  "Distance",       "Edge Mostar index measuring bond distance asymmetry"),
+        # NEW: Special indices (3)
+        ("PI",   "Padmakar-Ivan Index",          "Distance",       "PI index based on edge partition cuts"),
+        ("Schultz","Schultz Index",              "Distance",       "Schultz molecular topological index: Σ (d_i + d_j)·d_ij"),
+        ("Gutman", "Gutman Index",               "Distance",       "Gutman index with degree weightings: Σ (d_i · d_j)·d_ij"),
     ]
     for ri, row in enumerate(definitions, start=2):
         for ci, val in enumerate(row, start=1):
