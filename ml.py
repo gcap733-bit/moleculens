@@ -390,26 +390,33 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                     if d_ij != INF:
                         gutman += float(d_i * d_j * d_ij)
 
-            vals = [
-                m1, m2, abc, r, h, f, azi, ga, sc,        # 9 original
-                bm, tm, gh, gbm, gtm, hg, bmg, bmh, tmg, tmh, sdd,  # 11 new
-                rm1, rm2, rabc, rr, rh, rf, rga, rbm, rsdd,  # 9 reverse
-                ds1, ds2, dsr, dsh, dsga,                  # 5 degree-sum
-                w, j_bal, z_hosoya, sz, ge,                # 5 distance
-                w_v, w_e, w_ve, sz_v, sz_e, sz_ve,          # 6 new Wiener & Szeged
-                mo_v, mo_e,                                 # 2 new Mostar
-                pi_val, schultz, gutman,                    # 3 new special
-            ]
+            # Map calculated values to their respective keys defensively
+            val_map = {
+                "M1": m1, "M2": m2, "ABC": abc, "R": r, "H": h, "F": f, "AZI": azi, "GA": ga, "SC": sc,
+                "BM": bm, "TM": tm, "GH": gh, "GBM": gbm, "GTM": gtm, "HG": hg, "BMG": bmg, "BMH": bmh, "TMG": tmg, "TMH": tmh, "SDD": sdd,
+                "RM1": rm1, "RM2": rm2, "RABC": rabc, "RR": rr, "RH": rh, "RF": rf, "RGA": rga, "RBM": rbm, "RSDD": rsdd,
+                "DS1": ds1, "DS2": ds2, "DSR": dsr, "DSH": dsh, "DSGA": dsga,
+                "W": w, "J": j_bal, "Z": z_hosoya, "Sz": sz, "GE": ge,
+                "W_v": w_v, "W_e": w_e, "W_ve": w_ve, "Sz_v": sz_v, "Sz_e": sz_e, "Sz_ve": sz_ve,
+                "Mo_v": mo_v, "Mo_e": mo_e,
+                "PI": pi_val, "Schultz": schultz, "Gutman": gutman
+            }
 
-            for k, val in zip(all_keys, vals):
-                results[k].append(_safe_float(val))
+            for k in all_keys:
+                results[k].append(_safe_float(val_map.get(k, float('nan'))))
 
         except Exception:
             for k in all_keys:
                 results[k].append(float('nan'))
 
-    for k, vals in results.items():
-        df[k] = [v if not math.isnan(v) else float('nan') for v in vals]
+    expected_len = len(df)
+    for k, vals_list in results.items():
+        # Defensively ensure the list length exactly matches the DataFrame index length
+        if len(vals_list) < expected_len:
+            vals_list = vals_list + [float('nan')] * (expected_len - len(vals_list))
+        elif len(vals_list) > expected_len:
+            vals_list = vals_list[:expected_len]
+        df[k] = [v if not math.isnan(v) else float('nan') for v in vals_list]
 
     df.dropna(subset=all_keys, inplace=True)
     df.reset_index(drop=True, inplace=True)
