@@ -78,11 +78,18 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     ws["A7"] = "Veber pass";    ws["B7"] = veber
     ws["A8"] = "PAINS clean";   ws["B8"] = pains
 
-    best = top_models.sort_values("R2_mean", ascending=False).iloc[0]
+    if not top_models.empty:
+        best = top_models.sort_values("R2_mean", ascending=False).iloc[0]
+        best_r2 = round(float(best["R2_mean"]), 4)
+        best_model_desc = f"{best['Model']} predicting {best['Property']}"
+    else:
+        best_r2 = "N/A"
+        best_model_desc = "N/A (Insufficient data for ML)"
+
     ws["A9"]  = "Best R² overall"
-    ws["B9"]  = round(float(best["R2_mean"]), 4)
+    ws["B9"]  = best_r2
     ws["A10"] = "Best model"
-    ws["B10"] = f"{best['Model']} predicting {best['Property']}"
+    ws["B10"] = best_model_desc
 
     for row in ws["A3:A10"]:
         for cell in row:
