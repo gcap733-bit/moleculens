@@ -30,7 +30,7 @@ API_HOST = "0.0.0.0"
 API_PORT = 8000
 CORS_ORIGINS = ["*"]     # restrict this in production
 
-# --- Topological indices computed ---
+# --- Topological indices computed: 39 Original + 11 New = 50 Total ---
 TOPO_INDICES = [
     # ── Original degree-based (9) ──────────────────────
     "M1",   # First Zagreb index
@@ -68,14 +68,28 @@ TOPO_INDICES = [
     "DS1",  # Degree-Sum Zagreb 1: sum((u+v)²)
     "DS2",  # Degree-Sum Zagreb 2: sum((u+v)(u+v))
     "DSR",  # Degree-Sum Randic: sum(1/sqrt(u+v))
-    "DSH",  # Degree-Sum Harmonic: sum(2/(u+v)) = H (same, kept for completeness)
-    "DSGA", # Degree-Sum GA: sum(2sqrt(uv)/(u+v))  = GA (same base)
-    # ── Distance-based (5) ─────────────────────────────
-    "W",    # Wiener index
+    "DSH",  # Degree-Sum Harmonic: sum(2/(u+v))
+    "DSGA", # Degree-Sum GA: sum(2sqrt(uv)/(u+v))
+    # ── Original Distance-based (5) ────────────────────
+    "W",    # Wiener index (original)
     "J",    # Balaban J index
     "Z",    # Hosoya Z index
-    "Sz",   # Szeged index
+    "Sz",   # Szeged index (original)
     "GE",   # Graph entropy (Shannon)
+    # ── NEW: Advanced distance-based Wiener variants (6) 
+    "W_v",     # Vertex Wiener: sum over pairs of vertices
+    "W_e",     # Edge Wiener: sum over pairs of edges
+    "W_ve",    # Vertex-edge Wiener: mixed
+    "Sz_v",    # Vertex Szeged: based on vertex partitioning
+    "Sz_e",    # Edge Szeged: based on edge partitioning
+    "Sz_ve",   # Vertex-edge Szeged: mixed
+    # ── NEW: Mostar indices (2)
+    "Mo_v",    # Vertex Mostar
+    "Mo_e",    # Edge Mostar
+    # ── NEW: Special indices (3)
+    "PI",      # Padmakar-Ivan index
+    "Schultz", # Schultz index
+    "Gutman",  # Gutman index
 ]
 
 # --- ML targets — all predictable numerical properties ---
