@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -8,69 +8,92 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
+
+/* ── DARK THEME (default) ── */
+:root,[data-theme="dark"]{
   --bg:#080a0d; --bg1:#0d1117; --bg2:#13181f; --bg3:#1a2130;
   --border:#1e2a3a; --border2:#253347;
   --text:#dde4ed; --text2:#8fa3bd; --text3:#4a6080;
   --accent:#00e5a0; --accent2:#00c88a;
   --blue:#3d9bff; --yellow:#f5c842; --red:#ff5c5c; --purple:#a78bfa;
-  --mono:'IBM Plex Mono',monospace; --serif:'Cormorant Garamond',Georgia,serif;
-  --r:6px;
+  --shadow:rgba(0,0,0,0.4);
+  --noise-opacity:0.5;
+  --toggle-ico:"☀️";
 }
+
+/* ── LIGHT THEME ── */
+[data-theme="light"]{
+  --bg:#f5f7fa; --bg1:#ffffff; --bg2:#eef1f6; --bg3:#e4e9f0;
+  --border:#d0d7e3; --border2:#b8c2d4;
+  --text:#1a2130; --text2:#3d4f6a; --text3:#7a90aa;
+  --accent:#009e6e; --accent2:#007d57;
+  --blue:#1a6fd4; --yellow:#c49a00; --red:#cc2a2a; --purple:#6d50d4;
+  --shadow:rgba(0,0,0,0.12);
+  --noise-opacity:0.15;
+  --toggle-ico:"🌙";
+}
+
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.6;min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:.5}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden;transition:background .25s,color .25s}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:var(--noise-opacity)}
 
 /* NAV */
-nav{position:sticky;top:0;z-index:100;background:rgba(8,10,13,.93);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:52px}
-.nav-logo{font-family:var(--serif);font-size:21px;font-weight:300;color:var(--text);cursor:pointer;letter-spacing:-.3px;user-select:none}
+nav{position:sticky;top:0;z-index:100;background:rgba(8,10,13,.93);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:56px;transition:background .25s,border-color .25s}
+[data-theme="light"] nav{background:rgba(245,247,250,.95)}
+.nav-logo{font-family:'Cormorant Garamond',Georgia,serif;font-size:23px;font-weight:300;color:var(--text);cursor:pointer;letter-spacing:-.3px;user-select:none}
 .nav-logo em{font-style:italic;color:var(--accent)}
-.nav-links{display:flex;gap:2px}
-.nav-btn{background:none;border:none;font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:6px 14px;border-radius:var(--r);transition:color .15s,background .15s}
+.nav-links{display:flex;gap:2px;align-items:center}
+.nav-btn{background:none;border:none;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:6px 14px;border-radius:6px;transition:color .15s,background .15s}
 .nav-btn:hover{color:var(--text);background:var(--bg2)}
 .nav-btn.on{color:var(--accent);background:rgba(0,229,160,.06)}
 
+/* THEME TOGGLE BUTTON */
+.theme-toggle{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:5px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--text2);font-family:'IBM Plex Mono',monospace;transition:all .2s;white-space:nowrap;margin-left:8px}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.theme-toggle .toggle-icon{font-size:15px;line-height:1}
+.theme-toggle .toggle-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+
 /* PAGE SYSTEM */
-.pg{display:none;min-height:calc(100vh - 52px);animation:fadeUp .3s ease}
+.pg{display:none;min-height:calc(100vh - 56px);animation:fadeUp .3s ease}
 .pg.on{display:block}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .wrap{max-width:980px;margin:0 auto;padding:40px 32px 80px}
 
 /* TYPOGRAPHY */
-.eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
-.display{font-family:var(--serif);font-size:42px;font-weight:300;letter-spacing:-1.2px;line-height:1.1;color:var(--text)}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.display{font-family:'Cormorant Garamond',Georgia,serif;font-size:44px;font-weight:300;letter-spacing:-1.2px;line-height:1.1;color:var(--text)}
 .display em{font-style:italic;color:var(--accent)}
-.lead{font-size:14px;color:var(--text2);line-height:1.8;max-width:620px;margin-top:12px}
+.lead{font-size:15px;color:var(--text2);line-height:1.8;max-width:620px;margin-top:12px}
 .sh{display:flex;align-items:center;gap:12px;margin:36px 0 18px}
-.sh h2{font-family:var(--serif);font-size:22px;font-weight:300;letter-spacing:-.5px;white-space:nowrap}
+.sh h2{font-family:'Cormorant Garamond',Georgia,serif;font-size:24px;font-weight:300;letter-spacing:-.5px;white-space:nowrap}
 .sh h2 em{font-style:italic;color:var(--accent)}
 .sh-line{flex:1;height:1px;background:linear-gradient(to right,var(--border2),transparent)}
-.slabel{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;margin-top:20px}
+.slabel{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;margin-top:20px}
 
 /* CARDS */
 .cgrid{display:grid;gap:12px;margin-bottom:28px}
 .c2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 .c3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
 .c4{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
-.card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
-.clabel{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
-.cval{font-family:var(--serif);font-size:30px;font-weight:300;line-height:1}
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:18px 20px;transition:background .25s,border-color .25s}
+.clabel{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.cval{font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;font-weight:300;line-height:1}
 .cval.ac{color:var(--accent)} .cval.bl{color:var(--blue)} .cval.yl{color:var(--yellow)}
-.csub{font-size:11px;color:var(--text3);margin-top:4px}
-.cbody{font-size:12px;color:var(--text2);line-height:1.75}
-.ctitle{font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px}
+.csub{font-size:12px;color:var(--text3);margin-top:4px}
+.cbody{font-size:13px;color:var(--text2);line-height:1.75}
+.ctitle{font-size:14px;font-weight:500;color:var(--text);margin-bottom:5px}
 
 /* BADGES */
-.bx{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:500;letter-spacing:.04em}
+.bx{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:500;letter-spacing:.04em}
 .bx.pass{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.2)}
 .bx.fail{background:rgba(255,92,92,.1);color:var(--red);border:1px solid rgba(255,92,92,.2)}
 .bx.info{background:rgba(61,155,255,.1);color:var(--blue);border:1px solid rgba(61,155,255,.2)}
 
 /* TABLES */
-.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);margin-bottom:24px}
-table{width:100%;border-collapse:collapse;font-size:12px}
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:24px}
+table{width:100%;border-collapse:collapse;font-size:13px}
 thead tr{background:var(--bg2)}
-th{padding:9px 13px;text-align:left;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);font-weight:400;white-space:nowrap}
+th{padding:9px 13px;text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);font-weight:400;white-space:nowrap}
 td{padding:8px 13px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--bg2)}
@@ -83,65 +106,65 @@ tbody tr:hover td{background:var(--bg2)}
 
 /* RESULT TABS */
 .rtabs{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;margin-bottom:24px;flex-wrap:nowrap}
-.rtab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:10px 16px;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
+.rtab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:10px 16px;transition:color .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
 .rtab:hover{color:var(--text2)}
 .rtab.on{color:var(--accent);border-bottom-color:var(--accent)}
 .rpan{display:none}
 .rpan.on{display:block;animation:fadeUp .2s ease}
 
 /* SHAP */
-.ssel{background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r);padding:7px 12px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:14px;outline:none;cursor:pointer}
+.ssel{background:var(--bg1);border:1px solid var(--border2);border-radius:6px;padding:7px 12px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;margin-bottom:14px;outline:none;cursor:pointer}
 .ssel:focus{border-color:var(--accent)}
 .srows{display:flex;flex-direction:column;gap:7px;margin-bottom:24px}
 .srow{display:flex;align-items:center;gap:10px}
-.slbl{width:54px;font-size:11px;color:var(--text3);text-align:right;flex-shrink:0}
+.slbl{width:54px;font-size:12px;color:var(--text3);text-align:right;flex-shrink:0}
 .strk{flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden}
 .sfil{height:100%;border-radius:4px;transition:width .5s ease}
-.sval{width:70px;font-size:11px;color:var(--text3)}
+.sval{width:70px;font-size:12px;color:var(--text3)}
 
 /* HEATMAP */
 .hmw{overflow-x:auto;margin-bottom:24px}
-.hmt{border-collapse:collapse;font-size:11px;font-family:var(--mono)}
-.hmt th{padding:7px 10px;color:var(--text3);font-weight:400;font-size:10px;letter-spacing:.06em;text-align:center}
-.hmt td{padding:6px 10px;border-radius:3px;text-align:center;font-size:11px}
+.hmt{border-collapse:collapse;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.hmt th{padding:7px 10px;color:var(--text3);font-weight:400;font-size:11px;letter-spacing:.06em;text-align:center}
+.hmt td{padding:6px 10px;border-radius:3px;text-align:center;font-size:12px}
 .hmlbl{text-align:left!important;color:var(--text2);padding-right:14px!important;white-space:nowrap;font-weight:500}
-.leg{display:flex;gap:14px;font-size:11px;color:var(--text3);margin-bottom:10px;flex-wrap:wrap}
+.leg{display:flex;gap:14px;font-size:12px;color:var(--text3);margin-bottom:10px;flex-wrap:wrap}
 
 /* SEARCH PAGE */
 .search-hero{padding:64px 0 0;max-width:680px;margin:0 auto;padding-left:32px;padding-right:32px}
-#di{flex:1;background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r);padding:14px 18px;font-family:var(--mono);font-size:15px;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s}
+#di{flex:1;background:var(--bg1);border:1px solid var(--border2);border-radius:6px;padding:14px 18px;font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s,background .25s}
 #di::placeholder{color:var(--text3)}
 #di:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,160,.07)}
 #di:disabled{opacity:.4;cursor:not-allowed}
 #di.err{border-color:var(--red)}
 #di.wrn{border-color:var(--yellow)}
 .srow-inp{display:flex;gap:8px;margin-top:12px}
-.rbtn{background:var(--accent);color:#000;border:none;border-radius:var(--r);padding:14px 26px;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s,transform .1s;flex-shrink:0;letter-spacing:.02em}
+.rbtn{background:var(--accent);color:#000;border:none;border-radius:6px;padding:14px 26px;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s,transform .1s;flex-shrink:0;letter-spacing:.02em}
 .rbtn:hover{background:var(--accent2)}
 .rbtn:active{transform:scale(.97)}
 .rbtn:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;transform:none}
-.mbox{margin-top:12px;font-size:12px;padding:9px 13px;border-radius:var(--r);border-left:3px solid;display:none}
+.mbox{margin-top:12px;font-size:13px;padding:9px 13px;border-radius:6px;border-left:3px solid;display:none}
 .mbox.on{display:block}
 .mbox.er{border-color:var(--red);background:rgba(255,92,92,.05);color:#ff9090}
 .mbox.wn{border-color:var(--yellow);background:rgba(245,200,66,.05);color:#f5d87a}
 .mbox.ok{border-color:var(--accent);background:rgba(0,229,160,.05);color:var(--accent)}
 .pills{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
-.pill{background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:4px 12px;font-size:11px;color:var(--text3);cursor:pointer;font-family:var(--mono);transition:border-color .15s,color .15s}
+.pill{background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:4px 12px;font-size:12px;color:var(--text3);cursor:pointer;font-family:'IBM Plex Mono',monospace;transition:border-color .15s,color .15s}
 .pill:hover{border-color:var(--accent);color:var(--accent)}
-.bban{display:none;margin-top:16px;padding:10px 14px;border-radius:var(--r);border-left:3px solid var(--red);background:rgba(255,92,92,.05);font-size:12px;color:#ff9090;line-height:1.7}
+.bban{display:none;margin-top:16px;padding:10px 14px;border-radius:6px;border-left:3px solid var(--red);background:rgba(255,92,92,.05);font-size:13px;color:#ff9090;line-height:1.7}
 .bban.on{display:block}
 .bban code{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px}
 
 /* PROGRESS */
 #prog-sec{display:none;padding:60px 0 40px}
 .pc{max-width:640px;margin:0 auto;padding:0 32px}
-.pt{font-family:var(--serif);font-size:22px;font-weight:300;margin-bottom:4px}
+.pt{font-family:'Cormorant Garamond',Georgia,serif;font-size:24px;font-weight:300;margin-bottom:4px}
 .pt em{font-style:italic;color:var(--accent)}
-.ps{font-size:11px;color:var(--text3);margin-bottom:20px;letter-spacing:.06em}
+.ps{font-size:12px;color:var(--text3);margin-bottom:20px;letter-spacing:.06em}
 .segbar{display:flex;gap:4px;margin-bottom:4px}
 .seg{flex:1;height:5px;border-radius:3px;background:var(--border2);transition:background .4s}
 .seglbls{display:flex;gap:4px;margin-bottom:18px}
-.seglbl{flex:1;font-size:9px;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase}
+.seglbl{flex:1;font-size:10px;color:var(--text3);text-align:center;letter-spacing:.06em;text-transform:uppercase}
 .ptrk{height:2px;background:var(--border2);border-radius:1px;overflow:hidden;margin-bottom:22px}
 .pbar{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--accent),var(--blue),var(--accent));background-size:200%;width:40%;animation:slide 1.4s ease-in-out infinite,shim 2s linear infinite}
 .pbar.done{animation:none;width:100%;background:var(--accent)}
@@ -155,57 +178,58 @@ tbody tr:hover td{background:var(--bg2)}
 .pstep-ico{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:9px;transition:border-color .3s,background .3s;color:var(--text3)}
 .pstep.on .pstep-ico{border-color:var(--accent);color:var(--accent);animation:pseg 1s ease-in-out infinite}
 .pstep.dn .pstep-ico{border-color:var(--accent);background:var(--accent);color:#000;animation:none}
-.pstep-txt{font-size:12px;color:var(--text);font-weight:500}
-.pstep-sub{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.55}
+.pstep-txt{font-size:13px;color:var(--text);font-weight:500}
+.pstep-sub{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.55}
 
 /* RESULTS */
 .res-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)}
-.res-title{font-family:var(--serif);font-size:30px;font-weight:300;letter-spacing:-.7px}
+.res-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;font-weight:300;letter-spacing:-.7px}
 .res-title em{font-style:italic;color:var(--accent)}
-.res-meta{font-size:11px;color:var(--text3);margin-top:4px}
+.res-meta{font-size:12px;color:var(--text3);margin-top:4px}
 .dlrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.dlbtn{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);padding:8px 16px;font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:none;transition:border-color .15s,color .15s;letter-spacing:.02em}
+.dlbtn{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:8px 16px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;text-decoration:none;transition:border-color .15s,color .15s;letter-spacing:.02em}
 .dlbtn:hover{border-color:var(--accent);color:var(--accent)}
 .dlbtn.bl{border-color:rgba(61,155,255,.35);color:var(--blue)}
 .dlbtn.bl:hover{border-color:var(--blue)}
 .dlbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-.nsb{margin-top:28px;background:transparent;border:1px solid var(--border);border-radius:var(--r);padding:9px 18px;font-family:var(--mono);font-size:11px;color:var(--text3);cursor:pointer;transition:border-color .15s,color .15s}
+.nsb{margin-top:28px;background:transparent;border:1px solid var(--border);border-radius:6px;padding:9px 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text3);cursor:pointer;transition:border-color .15s,color .15s}
 .nsb:hover{border-color:var(--accent);color:var(--accent)}
 
 /* INDEX PILLS */
 .ifam{margin-bottom:18px}
-.ifam-hd{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.ifam-hd{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .ipills{display:flex;flex-wrap:wrap;gap:5px}
-.ipill{background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:3px 10px;font-size:11px;color:var(--text2)}
+.ipill{background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:3px 10px;font-size:12px;color:var(--text2)}
 .ipill.dim{color:var(--text3);border-style:dashed}
 
 /* HOW-TO STEPS */
 .hsteps{display:flex;flex-direction:column;gap:10px;margin-bottom:32px}
-.hstep{display:flex;gap:16px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;align-items:flex-start}
-.hnum{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--accent);flex-shrink:0;line-height:1;width:28px;padding-top:2px}
-.htitle{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px}
-.hdesc{font-size:12px;color:var(--text3);line-height:1.65}
+.hstep{display:flex;gap:16px;background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:16px 18px;align-items:flex-start}
+.hnum{font-family:'Cormorant Garamond',Georgia,serif;font-size:30px;font-weight:300;color:var(--accent);flex-shrink:0;line-height:1;width:28px;padding-top:2px}
+.htitle{font-size:14px;font-weight:500;color:var(--text);margin-bottom:3px}
+.hdesc{font-size:13px;color:var(--text3);line-height:1.65}
 
 /* CONTACT */
-.ccard{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;max-width:480px}
-.cname{font-family:var(--serif);font-size:28px;font-weight:300;color:var(--text);margin-bottom:4px}
-.crole{font-size:11px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}
-.crow{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;color:var(--text2)}
+.ccard{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:28px 32px;max-width:480px}
+.cname{font-family:'Cormorant Garamond',Georgia,serif;font-size:30px;font-weight:300;color:var(--text);margin-bottom:4px}
+.crole{font-size:12px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}
+.crow{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:14px;color:var(--text2)}
 .crow a{color:var(--blue);text-decoration:none}
 .crow a:hover{text-decoration:underline}
 .cico{width:15px;height:15px;flex-shrink:0;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 
 /* FOOTER */
-footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--text3);letter-spacing:.06em}
+footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--text3);letter-spacing:.06em}
 
 @media(max-width:640px){
   .srow-inp{flex-direction:column}
-  .display{font-size:30px}
+  .display{font-size:32px}
   .wrap{padding:24px 16px 60px}
   .search-hero{padding:36px 16px 0}
   nav{padding:0 16px}
   .nav-links{gap:0}
-  .nav-btn{padding:6px 8px;font-size:10px}
+  .nav-btn{padding:6px 8px;font-size:11px}
+  .theme-toggle .toggle-label{display:none}
 }
 </style>
 </head>
@@ -218,6 +242,11 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
     <button class="nav-btn" data-pg="about" onclick="showPg('about')">About</button>
     <button class="nav-btn" data-pg="howto" onclick="showPg('howto')">How to use</button>
     <button class="nav-btn" data-pg="contact" onclick="showPg('contact')">Contact</button>
+    <!-- ── THEME TOGGLE ── -->
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" title="Switch theme">
+      <span class="toggle-icon" id="theme-icon">☀️</span>
+      <span class="toggle-label" id="theme-label">Light</span>
+    </button>
   </div>
 </nav>
 
@@ -225,8 +254,8 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
 <div id="pg-home" class="pg on">
   <div class="search-hero">
     <div class="eyebrow">Drug QSPR Research Pipeline</div>
-    <div style="font-family:var(--serif);font-size:36px;font-weight:300;letter-spacing:-1px;line-height:1.1">Molecu<em style="font-style:italic;color:var(--accent)">Lens</em></div>
-    <div style="font-size:12px;color:var(--text3);margin-top:6px;margin-bottom:20px">Topological Indices × Machine Learning × Real Drug Data</div>
+    <div style="font-family:'Cormorant Garamond',Georgia,serif;font-size:38px;font-weight:300;letter-spacing:-1px;line-height:1.1">Molecu<em style="font-style:italic;color:var(--accent)">Lens</em></div>
+    <div style="font-size:13px;color:var(--text3);margin-top:6px;margin-bottom:20px">Topological Indices × Machine Learning × Real Drug Data</div>
     <div class="eyebrow" style="margin-bottom:8px">Enter a disease name</div>
     <div class="srow-inp">
       <input id="di" type="text" placeholder="e.g. diabetes, hypertension, alzheimer..." autocomplete="off" spellcheck="false"/>
@@ -266,8 +295,8 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
           <div class="pstep-sub">Lipinski Rule of Five (MW≤500, LogP≤5, HBD≤5, HBA≤10) · Veber rules (RotBonds≤10, TPSA≤140) · PAINS substructure filter</div>
         </div></div>
         <div class="pstep" id="ps2"><div class="pstep-ico">3</div><div>
-          <div class="pstep-txt">Computing 39 topological indices</div>
-          <div class="pstep-sub">9 original degree-based (M1,M2,ABC,R,H,F,AZI,GA,SC) · 11 new degree-based (BM,TM,GH,GBM,GTM,HG,BMG,BMH,TMG,TMH,SDD) · 9 reverse-degree (RM1…RSDD) · 5 degree-sum (DS1…DSGA) · 5 distance-based (Wiener, Balaban J, Hosoya Z, Szeged, Graph Entropy)</div>
+          <div class="pstep-txt">Computing 50 topological indices</div>
+          <div class="pstep-sub">9 original degree-based (M1,M2,ABC,R,H,F,AZI,GA,SC) · 11 new degree-based (BM,TM,GH,GBM,GTM,HG,BMG,BMH,TMG,TMH,SDD) · 9 reverse-degree · 5 degree-sum · 5 distance-based · 11 advanced cut-graph (W_v,W_e,W_ve,Sz_v,Sz_e,Sz_ve,Mo_v,Mo_e,PI,Schultz,Gutman)</div>
         </div></div>
         <div class="pstep" id="ps3"><div class="pstep-ico">4</div><div>
           <div class="pstep-txt">ML training + correlation analysis</div>
@@ -306,7 +335,7 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
     <div style="padding-bottom:32px;margin-bottom:32px;border-bottom:1px solid var(--border)">
       <div class="eyebrow">About this tool</div>
       <div class="display">Molecu<em>Lens</em></div>
-      <div class="lead">An automated drug discovery research platform. Type any disease name — MolecuLens fetches real drug data from multiple databases, computes 39 graph-theoretic topological indices, trains 11 ML models with rigorous 5-fold CV, and delivers a full QSPR analysis with statistical significance testing, SHAP explanations, and drug-likeness filters.</div>
+      <div class="lead">An automated drug discovery research platform. Type any disease name — MolecuLens fetches real drug data from multiple databases, computes 50 graph-theoretic topological indices, trains 11 ML models with rigorous 5-fold CV, and delivers a full QSPR analysis with statistical significance testing, SHAP explanations, and drug-likeness filters.</div>
     </div>
 
     <div class="sh"><h2>Data <em>sources</em></h2><div class="sh-line"></div></div>
@@ -317,13 +346,14 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
       <div class="card"><div class="clabel">UniChem + ChEMBL Bioactivity</div><div class="cbody"><strong style="color:var(--text)">UniChem:</strong> Cross-database IDs — ChemSpider, ZINC, DrugBank, ChEBI, BindingDB (3 fallback strategies).<br><strong style="color:var(--text)">ChEMBL Bioactivity:</strong> Experimental IC50, Ki, EC50, Kd values from ChEMBL assays per drug.</div></div>
     </div>
 
-    <div class="sh"><h2>39 Topological <em>indices</em></h2><div class="sh-line"></div></div>
+    <div class="sh"><h2>50 Topological <em>indices</em></h2><div class="sh-line"></div></div>
     <div class="card" style="margin-bottom:32px">
       <div class="ifam"><div class="ifam-hd">Original degree-based (9)</div><div class="ipills"><span class="ipill">M1 — First Zagreb</span><span class="ipill">M2 — Second Zagreb</span><span class="ipill">ABC — Atom-Bond Connectivity</span><span class="ipill">R — Randić</span><span class="ipill">H — Harmonic</span><span class="ipill">F — Forgotten</span><span class="ipill">AZI — Augmented Zagreb</span><span class="ipill">GA — Geometric-Arithmetic</span><span class="ipill">SC — Sum-Connectivity</span></div></div>
       <div class="ifam"><div class="ifam-hd">New degree-based (11)</div><div class="ipills"><span class="ipill">BM — Bi-Zagreb</span><span class="ipill">TM — Tri-Zagreb</span><span class="ipill">GH — Geometric-Harmonic</span><span class="ipill">GBM — Geometric Bi-Zagreb</span><span class="ipill">GTM — Geometric Tri-Zagreb</span><span class="ipill">HG — Harmonic-Geometric</span><span class="ipill">BMG — Bi Zagreb-Geometric</span><span class="ipill">BMH — Bi Zagreb-Harmonic</span><span class="ipill">TMG — Tri Zagreb-Geometric</span><span class="ipill">TMH — Tri Zagreb-Harmonic</span><span class="ipill">SDD — Symmetric Degree Division</span></div></div>
       <div class="ifam"><div class="ifam-hd">Reverse-degree variants (9) — rd(v) = n+1−d(v)</div><div class="ipills"><span class="ipill">RM1</span><span class="ipill">RM2</span><span class="ipill">RABC</span><span class="ipill">RR</span><span class="ipill">RH</span><span class="ipill">RF</span><span class="ipill">RGA</span><span class="ipill">RBM</span><span class="ipill">RSDD</span></div></div>
       <div class="ifam"><div class="ifam-hd">Degree-sum variants (5) — weight = d(u)+d(v)</div><div class="ipills"><span class="ipill">DS1</span><span class="ipill">DS2</span><span class="ipill">DSR</span><span class="ipill">DSH</span><span class="ipill">DSGA</span></div></div>
-      <div class="ifam" style="margin-bottom:0"><div class="ifam-hd">Distance-based (5)</div><div class="ipills"><span class="ipill">W — Wiener</span><span class="ipill">J — Balaban J</span><span class="ipill">Z — Hosoya</span><span class="ipill">Sz — Szeged</span><span class="ipill">GE — Graph Entropy</span></div></div>
+      <div class="ifam"><div class="ifam-hd">Distance-based (5)</div><div class="ipills"><span class="ipill">W — Wiener</span><span class="ipill">J — Balaban J</span><span class="ipill">Z — Hosoya</span><span class="ipill">Sz — Szeged</span><span class="ipill">GE — Graph Entropy</span></div></div>
+      <div class="ifam" style="margin-bottom:0"><div class="ifam-hd">Advanced cut-graph indices (11) — new</div><div class="ipills"><span class="ipill">W_v — Vertex Wiener</span><span class="ipill">W_e — Edge Wiener</span><span class="ipill">W_ve — Vertex-edge Wiener</span><span class="ipill">Sz_v — Vertex Szeged</span><span class="ipill">Sz_e — Edge Szeged</span><span class="ipill">Sz_ve — Vertex-edge Szeged</span><span class="ipill">Mo_v — Vertex Mostar</span><span class="ipill">Mo_e — Edge Mostar</span><span class="ipill">PI — Padmakar-Ivan</span><span class="ipill">Schultz</span><span class="ipill">Gutman</span></div></div>
     </div>
 
     <div class="sh"><h2>11 ML <em>models</em></h2><div class="sh-line"></div></div>
@@ -338,7 +368,7 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
     <div class="cgrid c2">
       <div class="card"><div class="clabel">Pearson correlation + p-values</div><div class="cbody">Pearson r with two-tailed p-values for every index–property pair. Significance: *** p&lt;0.001 · ** p&lt;0.01 · * p&lt;0.05 · ns.</div></div>
       <div class="card"><div class="clabel">Spearman correlation</div><div class="cbody">Non-parametric rank-based correlation — detects monotonic non-linear relationships that Pearson misses.</div></div>
-      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">Variance Inflation Factor for all 39 indices. VIF&lt;5 = low, 5–10 = moderate, &gt;10 = high (redundant index).</div></div>
+      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">Variance Inflation Factor for all 50 indices. VIF&lt;5 = low, 5–10 = moderate, &gt;10 = high (redundant index).</div></div>
       <div class="card"><div class="clabel">SHAP explanations</div><div class="cbody">SHapley Additive exPlanations for the best model per property — shows exactly which index drives each prediction.</div></div>
     </div>
   </div>
@@ -356,30 +386,31 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
     <div class="sh"><h2>Running the <em>pipeline</em></h2><div class="sh-line"></div></div>
     <div class="hsteps">
       <div class="hstep"><div class="hnum">1</div><div><div class="htitle">Enter a disease name</div><div class="hdesc">Type any disease on the Pipeline tab — diabetes, hypertension, alzheimer, cancer, asthma, epilepsy, parkinson, rheumatoid arthritis, etc. Typos are handled automatically: "diabtes" suggests "diabetes". The system validates against a curated MeSH disease list and probes ChEMBL for drug availability before starting the pipeline.</div></div></div>
-      <div class="hstep"><div class="hnum">2</div><div><div class="htitle">Wait for the pipeline to complete</div><div class="hdesc">The first run of a disease takes 20–45 minutes — it fetches up to 100 real drugs from 4 APIs, computes 39 topological indices per molecule, and trains 11 ML models with 5-fold cross-validation. Do not close or refresh the browser tab. The same disease searched again returns instantly (&lt;1 second) from the results cache.</div></div></div>
-      <div class="hstep"><div class="hnum">3</div><div><div class="htitle">Explore results across 7 tabs</div><div class="hdesc">Results are displayed in 7 tabs in the exact order the pipeline ran: <strong style="color:var(--text)">Drug Properties</strong> (all physicochemical + ADMET data) → <strong style="color:var(--text)">Drug-likeness Filters</strong> (Lipinski, Veber, PAINS) → <strong style="color:var(--text)">Topological Indices</strong> (all 39 per drug) → <strong style="color:var(--text)">Correlation Analysis</strong> (Pearson + Spearman + VIF) → <strong style="color:var(--text)">ML Performance</strong> (all 11 models + best per property) → <strong style="color:var(--text)">SHAP Importance</strong> (feature importance per property) → <strong style="color:var(--text)">Data Preview</strong> (first 10 drugs, all columns).</div></div></div>
-      <div class="hstep"><div class="hnum">4</div><div><div class="htitle">Download your data</div><div class="hdesc">Two download buttons appear: <strong style="color:var(--text)">CSV</strong> (all drugs × all properties, raw data, every column) and <strong style="color:var(--text)">Excel (7 sheets)</strong> — Drug Data, ML Results, Best Models, SHAP Importance, Correlation (Pearson + Spearman + VIF with colour-coded heatmap), and Index Definitions with full formulas ready for citation.</div></div></div>
+      <div class="hstep"><div class="hnum">2</div><div><div class="htitle">Wait for the pipeline to complete</div><div class="hdesc">The first run of a disease takes 20–45 minutes — it fetches up to 100 real drugs from 4 APIs, computes 50 topological indices per molecule, and trains 11 ML models with 5-fold cross-validation. Do not close or refresh the browser tab. The same disease searched again returns instantly (&lt;1 second) from the results cache.</div></div></div>
+      <div class="hstep"><div class="hnum">3</div><div><div class="htitle">Explore results across 7 tabs</div><div class="hdesc">Results are displayed in 7 tabs: <strong style="color:var(--text)">Drug Properties</strong> → <strong style="color:var(--text)">Drug-likeness Filters</strong> → <strong style="color:var(--text)">Topological Indices</strong> → <strong style="color:var(--text)">Correlation Analysis</strong> → <strong style="color:var(--text)">ML Performance</strong> → <strong style="color:var(--text)">SHAP Importance</strong> → <strong style="color:var(--text)">Data Preview</strong>.</div></div></div>
+      <div class="hstep"><div class="hnum">4</div><div><div class="htitle">Download your data</div><div class="hdesc">Two download buttons appear: <strong style="color:var(--text)">CSV</strong> (all drugs × all properties) and <strong style="color:var(--text)">Excel (7 sheets)</strong> — Drug Data, ML Results, Best Models, SHAP Importance, Correlation (Pearson + Spearman + VIF), and Index Definitions with full formulas ready for citation.</div></div></div>
     </div>
 
     <div class="sh"><h2>Understanding the <em>results</em></h2><div class="sh-line"></div></div>
     <div class="cgrid c2" style="margin-bottom:32px">
-      <div class="card"><div class="clabel">R² (coefficient of determination)</div><div class="cbody">How well topological indices predict the property. R²=1 is perfect, R²=0 is no better than random. Values above 0.7 are considered strong for QSPR research. R² std (± column) shows stability across CV folds — lower is better.</div></div>
-      <div class="card"><div class="clabel">MAE (mean absolute error)</div><div class="cbody">Average prediction error in the property's own units. Lower is better. Compare MAE only across models for the same property, not across different properties (units differ).</div></div>
-      <div class="card"><div class="clabel">SHAP values</div><div class="cbody">Mean absolute SHAP value per topological index. Higher = that index contributes more to the prediction. Positive values push predictions up; negative push them down. Use to identify which structural features matter.</div></div>
-      <div class="card"><div class="clabel">Pearson r + p-values</div><div class="cbody">*** = highly significant (p&lt;0.001). A high |r| with low p-value means the relationship is both strong and statistically reliable. Spearman ρ catches non-linear monotonic trends Pearson misses.</div></div>
-      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">VIF &lt;5: indices are independent. 5–10: moderate overlap. &gt;10: two indices carry essentially the same structural information — removing one won't hurt ML performance.</div></div>
-      <div class="card"><div class="clabel">Drug-likeness filters</div><div class="cbody">Lipinski pass = likely good oral bioavailability. Veber pass = additional oral absorption constraint. PAINS pass = no problematic substructures that cause false positives in biological assays.</div></div>
+      <div class="card"><div class="clabel">R² (coefficient of determination)</div><div class="cbody">How well topological indices predict the property. R²=1 is perfect, R²=0 is no better than random. Values above 0.7 are considered strong for QSPR research.</div></div>
+      <div class="card"><div class="clabel">MAE (mean absolute error)</div><div class="cbody">Average prediction error in the property's own units. Lower is better. Compare MAE only across models for the same property, not across different properties.</div></div>
+      <div class="card"><div class="clabel">SHAP values</div><div class="cbody">Mean absolute SHAP value per topological index. Higher = that index contributes more to the prediction. Use to identify which structural features matter most.</div></div>
+      <div class="card"><div class="clabel">Pearson r + p-values</div><div class="cbody">*** = highly significant (p&lt;0.001). A high |r| with low p-value means the relationship is both strong and statistically reliable.</div></div>
+      <div class="card"><div class="clabel">VIF multicollinearity</div><div class="cbody">VIF &lt;5: indices are independent. 5–10: moderate overlap. &gt;10: two indices carry essentially the same structural information.</div></div>
+      <div class="card"><div class="clabel">Drug-likeness filters</div><div class="cbody">Lipinski pass = likely good oral bioavailability. Veber pass = additional oral absorption constraint. PAINS pass = no problematic substructures.</div></div>
     </div>
 
     <div class="sh"><h2>Tips and <em>notes</em></h2><div class="sh-line"></div></div>
     <div class="card">
       <div class="cbody" style="display:flex;flex-direction:column;gap:10px">
-        <div>🔄 <strong style="color:var(--text)">Repeat searches are instant</strong> — results are cached after the first run. Share the link and others get instant results for diseases already analysed.</div>
+        <div>🔄 <strong style="color:var(--text)">Repeat searches are instant</strong> — results are cached after the first run.</div>
         <div>⏳ <strong style="color:var(--text)">Do not close the tab</strong> while running. The job runs on the server, but the browser polls for completion every 5 seconds.</div>
-        <div>📊 <strong style="color:var(--text)">More drugs = better ML</strong> — diseases with many ChEMBL entries (diabetes, hypertension, cancer) give more statistically reliable QSPR results.</div>
-        <div>🧬 <strong style="color:var(--text)">Sparse bioactivity</strong> — BIO_IC50, BIO_Ki etc. are often null. ChEMBL only has experimental data for a fraction of drugs per disease. This is normal and expected.</div>
-        <div>📥 <strong style="color:var(--text)">Excel workbook is publication-ready</strong> — the Correlation sheet has colour-coded heatmaps baked into cells, and the Index Definitions sheet has all formulas for direct citation.</div>
+        <div>📊 <strong style="color:var(--text)">More drugs = better ML</strong> — diseases with many ChEMBL entries give more statistically reliable QSPR results.</div>
+        <div>🧬 <strong style="color:var(--text)">Sparse bioactivity</strong> — BIO_IC50, BIO_Ki etc. are often null. ChEMBL only has experimental data for a fraction of drugs per disease. This is normal.</div>
+        <div>📥 <strong style="color:var(--text)">Excel workbook is publication-ready</strong> — the Correlation sheet has colour-coded heatmaps and the Index Definitions sheet has all formulas for direct citation.</div>
         <div>🔬 <strong style="color:var(--text)">ADMET fallback</strong> — if pkCSM is unavailable, RDKit-estimated ADMET properties are computed locally (marked ADMET_Source = RDKit_fallback).</div>
+        <div>🌓 <strong style="color:var(--text)">Theme toggle</strong> — switch between dark and light mode using the button in the top-right navigation bar.</div>
       </div>
     </div>
   </div>
@@ -414,7 +445,7 @@ footer{padding:20px 32px;border-top:1px solid var(--border);display:flex;justify
     </div>
 
     <div class="sh"><h2>Citing <em>MolecuLens</em></h2><div class="sh-line"></div></div>
-    <div class="card" style="max-width:600px;font-family:var(--mono);font-size:11px;color:var(--text2);line-height:1.8">
+    <div class="card" style="max-width:600px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text2);line-height:1.8">
       Natarajan, A. MolecuLens: An Automated Drug QSPR Pipeline Using Topological Indices and Machine Learning. Available at: web-production-97e1c.up.railway.app
     </div>
   </div>
@@ -431,6 +462,29 @@ let pollTimer=null,curJobId=null,curResults=null;
 const SEGC=['#00e5a0','#3d9bff','#f5c842','#ff5c5c','#a78bfa'];
 const STEPS=['ps0','ps1','ps2','ps3','ps4'];
 const STEP_SEG={'ps0':0,'ps1':1,'ps2':2,'ps3':3,'ps4':4};
+
+/* ── THEME TOGGLE ── */
+function toggleTheme(){
+  const html=document.documentElement;
+  const isLight=html.getAttribute('data-theme')==='light';
+  const next=isLight?'dark':'light';
+  html.setAttribute('data-theme',next);
+  localStorage.setItem('ml-theme',next);
+  document.getElementById('theme-icon').textContent=next==='dark'?'☀️':'🌙';
+  document.getElementById('theme-label').textContent=next==='dark'?'Light':'Dark';
+}
+/* Restore saved theme on load */
+(function(){
+  const saved=localStorage.getItem('ml-theme')||'dark';
+  document.documentElement.setAttribute('data-theme',saved);
+  // Update button to reflect current state
+  window.addEventListener('DOMContentLoaded',()=>{
+    const icon=document.getElementById('theme-icon');
+    const label=document.getElementById('theme-label');
+    if(icon) icon.textContent=saved==='dark'?'☀️':'🌙';
+    if(label) label.textContent=saved==='dark'?'Light':'Dark';
+  });
+})();
 
 /* PAGE NAV */
 function showPg(id){
@@ -552,7 +606,7 @@ function advStep(id){
   const idx=STEP_SEG[id];
   const seg=document.getElementById('sg'+idx);
   if(seg){seg.style.background=SEGC[idx];seg.style.animation='pseg 1s ease-in-out infinite';seg.style.boxShadow=`0 0 8px ${SEGC[idx]}88`;}
-  const lbl={'ps0':'Fetching drug data...','ps1':'Applying filters...','ps2':'Computing 39 indices...','ps3':'Training 11 ML models...','ps4':'SHAP + exporting...'};
+  const lbl={'ps0':'Fetching drug data...','ps1':'Applying filters...','ps2':'Computing 50 indices...','ps3':'Training 11 ML models...','ps4':'SHAP + exporting...'};
   document.getElementById('prog-stat').textContent=lbl[id]||'Running...';
 }
 function markDone(id){
@@ -580,23 +634,19 @@ function showResults(data,jobId){
   document.getElementById('res-ttl').innerHTML=`Results for <em style="font-style:italic;color:var(--accent)">${data.disease}</em>`;
   document.getElementById('res-meta').textContent=`${data.drug_count} drugs analysed · ${data.columns?.length||0} properties per drug`;
 
-  /* Downloads */
   document.getElementById('dlrow').innerHTML=`
     <a class="dlbtn" href="${API}/download/${jobId}" download><svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>Download CSV</a>
     <a class="dlbtn bl" href="${API}/download-excel/${jobId}" download><svg viewBox="0 0 16 16"><path d="M8 2v9M4 8l4 4 4-4M2 14h12"/></svg>Excel (7 sheets)</a>`;
 
-  /* Stat cards */
   const lip=Math.round((data.lipinski_pass||0)/n*100);
-  const veb=Math.round((data.veber_pass||0)/n*100);
   const pai=Math.round((data.pains_pass||0)/n*100);
   const bestR2=data.top_models?.length?Math.max(...data.top_models.map(m=>m.R2_mean||0)).toFixed(3):'—';
   document.getElementById('stat-grid').innerHTML=`
     <div class="card"><div class="clabel">Drugs analysed</div><div class="cval ac">${data.drug_count}</div></div>
     <div class="card"><div class="clabel">Best R²</div><div class="cval">${bestR2}</div></div>
-    <div class="card"><div class="clabel">Lipinski pass</div><div class="cval">${lip}<span style="font-size:16px;color:var(--text3)">%</span></div><div class="csub">${data.lipinski_pass||0} of ${n}</div></div>
-    <div class="card"><div class="clabel">PAINS clean</div><div class="cval">${pai}<span style="font-size:16px;color:var(--text3)">%</span></div><div class="csub">${data.pains_pass||0} of ${n}</div></div>`;
+    <div class="card"><div class="clabel">Lipinski pass</div><div class="cval">${lip}<span style="font-size:17px;color:var(--text3)">%</span></div><div class="csub">${data.lipinski_pass||0} of ${n}</div></div>
+    <div class="card"><div class="clabel">PAINS clean</div><div class="cval">${pai}<span style="font-size:17px;color:var(--text3)">%</span></div><div class="csub">${data.pains_pass||0} of ${n}</div></div>`;
 
-  /* Build tabs */
   const tabsEl=document.getElementById('rtabs');
   const pansEl=document.getElementById('rpans');
   tabsEl.innerHTML='';pansEl.innerHTML='';
@@ -629,7 +679,7 @@ function showResults(data,jobId){
   document.getElementById('res-sec').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-/* TAB 1: Drug Properties */
+/* TAB 1 */
 function buildProps(data){
   const el=document.getElementById('rp-props');
   const preview=data.drugs_preview||[];
@@ -642,7 +692,7 @@ function buildProps(data){
     ['Bioactivity — experimental (ChEMBL)',['BIO_IC50','BIO_Ki','BIO_EC50','BIO_Kd']],
     ['Cross-database identifiers (UniChem)',cols.filter(c=>c.startsWith('UC_')).concat(['InChIKey'])],
   ];
-  let html='<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Showing first 10 drugs. Each group corresponds to a different data source fetched during Step 1.</div>';
+  let html='<div style="font-size:13px;color:var(--text3);margin-bottom:16px">Showing first 10 drugs. Each group corresponds to a different data source fetched during Step 1.</div>';
   groups.forEach(([name,gcols])=>{
     const avail=gcols.filter(c=>cols.includes(c));
     if(!avail.length)return;
@@ -664,50 +714,31 @@ function buildProps(data){
   el.innerHTML=html;
 }
 
-/* TAB 2: Filters */
+/* TAB 2 */
 function buildFilters(data,n){
   const el=document.getElementById('rp-filters');
   const preview=data.drugs_preview||[];
   const lip=data.lipinski_pass||0,veb=data.veber_pass||0,pai=data.pains_pass||0;
   let html=`
-    <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Three standard medicinal chemistry filters applied to every drug.</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Three standard medicinal chemistry filters applied to every drug.</div>
     <div class="cgrid c3" style="margin-bottom:24px">
-      <div class="card">
-        <div class="clabel">Lipinski Rule of Five</div>
-        <div class="cval ac">${Math.round(lip/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
-        <div class="csub">${lip} / ${n} drugs pass</div>
-        <div class="cbody" style="margin-top:10px;font-size:11px">MW≤500 · LogP≤5 · HBD≤5 · HBA≤10<br>Predicts good oral bioavailability</div>
-      </div>
-      <div class="card">
-        <div class="clabel">Veber Rules</div>
-        <div class="cval bl">${Math.round(veb/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
-        <div class="csub">${veb} / ${n} drugs pass</div>
-        <div class="cbody" style="margin-top:10px;font-size:11px">RotBonds≤10 · TPSA≤140 Å²<br>Additional oral absorption filter</div>
-      </div>
-      <div class="card">
-        <div class="clabel">PAINS clean</div>
-        <div class="cval yl">${Math.round(pai/n*100)}<span style="font-size:16px;color:var(--text3)">%</span></div>
-        <div class="csub">${pai} / ${n} drugs</div>
-        <div class="cbody" style="margin-top:10px;font-size:11px">No pan-assay interference substructures<br>Important for assay credibility</div>
-      </div>
+      <div class="card"><div class="clabel">Lipinski Rule of Five</div><div class="cval ac">${Math.round(lip/n*100)}<span style="font-size:17px;color:var(--text3)">%</span></div><div class="csub">${lip} / ${n} drugs pass</div><div class="cbody" style="margin-top:10px;font-size:12px">MW≤500 · LogP≤5 · HBD≤5 · HBA≤10</div></div>
+      <div class="card"><div class="clabel">Veber Rules</div><div class="cval bl">${Math.round(veb/n*100)}<span style="font-size:17px;color:var(--text3)">%</span></div><div class="csub">${veb} / ${n} drugs pass</div><div class="cbody" style="margin-top:10px;font-size:12px">RotBonds≤10 · TPSA≤140 Å²</div></div>
+      <div class="card"><div class="clabel">PAINS clean</div><div class="cval yl">${Math.round(pai/n*100)}<span style="font-size:17px;color:var(--text3)">%</span></div><div class="csub">${pai} / ${n} drugs</div><div class="cbody" style="margin-top:10px;font-size:12px">No pan-assay interference substructures</div></div>
     </div>
     <div class="slabel">Per-drug filter results (first 10 drugs)</div>
     <div class="tw"><table><thead><tr><th>ChEMBL ID</th><th>MolWt</th><th>LogP</th><th>TPSA</th><th>HBD</th><th>HBA</th><th>RotBonds</th><th>Lipinski</th><th>Veber</th><th>PAINS</th></tr></thead><tbody>`;
   preview.forEach(r=>{
-    html+=`<tr>
-      <td class="tbl" style="white-space:nowrap">${r.ChEMBL_ID||'—'}</td>
-      <td>${fmt(r.MolWt,1)}</td><td>${fmt(r.LogP,2)}</td><td>${fmt(r.TPSA,1)}</td>
-      <td>${r.HBD??'—'}</td><td>${r.HBA??'—'}</td><td>${r.RotBonds??'—'}</td>
+    html+=`<tr><td class="tbl" style="white-space:nowrap">${r.ChEMBL_ID||'—'}</td><td>${fmt(r.MolWt,1)}</td><td>${fmt(r.LogP,2)}</td><td>${fmt(r.TPSA,1)}</td><td>${r.HBD??'—'}</td><td>${r.HBA??'—'}</td><td>${r.RotBonds??'—'}</td>
       <td><span class="bx ${r.Lipinski_Pass?'pass':'fail'}">${r.Lipinski_Pass?'PASS':'FAIL'}</span></td>
       <td><span class="bx ${r.Veber_Pass?'pass':'fail'}">${r.Veber_Pass?'PASS':'FAIL'}</span></td>
-      <td><span class="bx ${r.PAINS_Pass?'pass':'fail'}">${r.PAINS_Pass?'PASS':'FAIL'}</span></td>
-    </tr>`;
+      <td><span class="bx ${r.PAINS_Pass?'pass':'fail'}">${r.PAINS_Pass?'PASS':'FAIL'}</span></td></tr>`;
   });
   html+='</tbody></table></div>';
   el.innerHTML=html;
 }
 
-/* TAB 3: Topological Indices */
+/* TAB 3 */
 function buildIndices(data){
   const el=document.getElementById('rp-indices');
   const preview=data.drugs_preview||[];
@@ -715,11 +746,12 @@ function buildIndices(data){
   const fams=[
     ['Original degree-based (9)',['M1','M2','ABC','R','H','F','AZI','GA','SC']],
     ['New degree-based (11)',['BM','TM','GH','GBM','GTM','HG','BMG','BMH','TMG','TMH','SDD']],
-    ['Reverse-degree (9) — rd(v)=n+1−d(v)',['RM1','RM2','RABC','RR','RH','RF','RGA','RBM','RSDD']],
-    ['Degree-sum (5) — weight=d(u)+d(v)',['DS1','DS2','DSR','DSH','DSGA']],
+    ['Reverse-degree (9)',['RM1','RM2','RABC','RR','RH','RF','RGA','RBM','RSDD']],
+    ['Degree-sum (5)',['DS1','DS2','DSR','DSH','DSGA']],
     ['Distance-based (5)',['W','J','Z','Sz','GE']],
+    ['Advanced cut-graph (11)',['W_v','W_e','W_ve','Sz_v','Sz_e','Sz_ve','Mo_v','Mo_e','PI','Schultz','Gutman']],
   ];
-  let html='<div style="font-size:12px;color:var(--text3);margin-bottom:16px">39 topological indices computed per molecule from the molecular graph (atoms=vertices, bonds=edges). Showing first 10 drugs.</div>';
+  let html='<div style="font-size:13px;color:var(--text3);margin-bottom:16px">50 topological indices computed per molecule. Showing first 10 drugs.</div>';
   fams.forEach(([name,fcols])=>{
     const avail=fcols.filter(c=>cols.includes(c));
     if(!avail.length)return;
@@ -735,7 +767,7 @@ function buildIndices(data){
   el.innerHTML=html;
 }
 
-/* TAB 4: Correlation */
+/* TAB 4 */
 function buildCorr(data){
   const el=document.getElementById('rp-corr');
   const corr=data.correlation;
@@ -760,35 +792,33 @@ function buildCorr(data){
     ${ii.map(idx=>`<tr><th class="hmlbl">${idx}</th>${pp.map(p=>{
       const v=parseFloat(dobj[idx]?.[p]||0);
       const sig=sobj?sobj[idx]?.[p]||'':'';
-      return `<td style="background:${clr(v)}" title="${idx}→${p}: r=${v.toFixed(3)} ${sig}">${v.toFixed(2)}<sup style="font-size:8px;opacity:.7">${sig}</sup></td>`;
+      return `<td style="background:${clr(v)}" title="${idx}→${p}: r=${v.toFixed(3)} ${sig}">${v.toFixed(2)}<sup style="font-size:9px;opacity:.7">${sig}</sup></td>`;
     }).join('')}</tr>`).join('')}
     </tbody></table></div>`;
   }
-
-  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:4px">Pearson r and Spearman ρ between all 39 topological indices and all predicted properties. Colour: green=positive, red=negative.</div>
+  let html=`<div style="font-size:13px;color:var(--text3);margin-bottom:4px">Pearson r and Spearman ρ between all 50 topological indices and all predicted properties.</div>
   <div class="leg"><span>*** p&lt;0.001</span><span>** p&lt;0.01</span><span>* p&lt;0.05</span><span>ns = not significant</span></div>`;
   html+=hmap(pd,sd,'Pearson correlation (r) with significance stars');
   if(spd)html+=hmap(spd,null,'Spearman correlation (ρ) — non-parametric');
-
   if(vd&&Object.keys(vd).length){
-    html+=`<div class="slabel" style="margin-top:20px">Variance Inflation Factor (VIF) — multicollinearity among 39 topological indices</div>
+    html+=`<div class="slabel" style="margin-top:20px">Variance Inflation Factor (VIF) — multicollinearity among 50 topological indices</div>
     <div class="tw"><table><thead><tr><th>Index</th><th>VIF</th><th>Interpretation</th></tr></thead><tbody>`;
     Object.entries(vd).forEach(([idx,val])=>{
       const v=val==null?null:parseFloat(val);
-      const flag=v==null?'—':v<5?'✅ Low — independent':v<10?'⚠️ Moderate — some overlap':'❌ High — consider removing';
+      const flag=v==null?'—':v<5?'✅ Low':v<10?'⚠️ Moderate':'❌ High — consider removing';
       const c=v==null?'':v<5?'var(--accent)':v<10?'var(--yellow)':'var(--red)';
       html+=`<tr><td class="tbl">${idx}</td><td style="color:${c}">${v==null?'N/A':v.toFixed(2)}</td><td class="tmt">${flag}</td></tr>`;
     });
-    html+=`</tbody></table></div><div style="font-size:11px;color:var(--text3);margin-top:-16px;margin-bottom:20px">VIF &lt;5: independent · 5–10: moderate overlap · &gt;10: redundant with another index</div>`;
+    html+=`</tbody></table></div>`;
   }
   el.innerHTML=html;
 }
 
-/* TAB 5: ML Performance */
+/* TAB 5 */
 function buildML(data){
   const el=document.getElementById('rp-ml');
   if(!data.top_models?.length){el.innerHTML='<div class="card"><div class="cbody">No ML results available.</div></div>';return;}
-  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:16px">11 ML models trained per property using 39 topological indices as features. 5-fold cross-validation with GridSearchCV hyperparameter tuning. R² std shows stability across CV folds.</div>
+  let html=`<div style="font-size:13px;color:var(--text3);margin-bottom:16px">11 ML models trained per property using 50 topological indices as features. 5-fold CV + GridSearchCV.</div>
   <div class="slabel">Best model per property</div>
   <div class="tw"><table><thead><tr><th>Property</th><th>Best model</th><th>R² mean</th><th>R² std</th><th>MAE</th></tr></thead><tbody>`;
   data.top_models.forEach(m=>{
@@ -801,23 +831,19 @@ function buildML(data){
       <td class="tmt">±${std}</td><td class="tmt">${mae}</td></tr>`;
   });
   html+='</tbody></table></div>';
-
   if(data.ml_results?.length){
-    html+=`<div class="slabel" style="margin-top:24px">All 11 models — full comparison (sorted best→worst per property)</div>
+    html+=`<div class="slabel" style="margin-top:24px">All 11 models — full comparison</div>
     <div class="tw"><table><thead><tr><th>Property</th><th>Model</th><th>R² mean</th><th>R² std</th><th>MAE</th></tr></thead><tbody>`;
     const grouped={};
     data.ml_results.forEach(m=>{(grouped[m.Property]=grouped[m.Property]||[]).push(m);});
     Object.entries(grouped).forEach(([prop,models])=>{
       models.sort((a,b)=>(b.R2_mean||0)-(a.R2_mean||0));
       models.forEach((m,i)=>{
-        const r2=m.R2_mean!=null?m.R2_mean.toFixed(3):'—';
-        const std=m.R2_std!=null?m.R2_std.toFixed(3):'—';
-        const mae=m.MAE_mean!=null?m.MAE_mean.toFixed(3):'—';
-        html+=`<tr>
-          <td ${i===0?'style="border-top:1px solid var(--border2)"':''}>
-            ${i===0?`<strong style="color:var(--text)">${prop}</strong>`:''}</td>
+        html+=`<tr><td ${i===0?'style="border-top:1px solid var(--border2)"':''}>${i===0?`<strong style="color:var(--text)">${prop}</strong>`:''}</td>
           <td ${i===0?'class="tac"':'class="tmt"'}>${m.Model}${i===0?' ★':''}</td>
-          <td>${r2}</td><td class="tmt">±${std}</td><td class="tmt">${mae}</td></tr>`;
+          <td>${m.R2_mean!=null?m.R2_mean.toFixed(3):'—'}</td>
+          <td class="tmt">±${m.R2_std!=null?m.R2_std.toFixed(3):'—'}</td>
+          <td class="tmt">${m.MAE_mean!=null?m.MAE_mean.toFixed(3):'—'}</td></tr>`;
       });
     });
     html+='</tbody></table></div>';
@@ -825,14 +851,14 @@ function buildML(data){
   el.innerHTML=html;
 }
 
-/* TAB 6: SHAP */
+/* TAB 6 */
 function buildSHAP(data){
   const el=document.getElementById('rp-shap');
   if(!data.shap||!Object.keys(data.shap).length){
-    el.innerHTML='<div class="card"><div class="cbody">SHAP data not available for this run. This can happen when all models fail for a property.</div></div>';return;
+    el.innerHTML='<div class="card"><div class="cbody">SHAP data not available for this run.</div></div>';return;
   }
   const props=Object.keys(data.shap);
-  el.innerHTML=`<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Mean absolute SHAP value per topological index for the best model of each property. Higher = stronger influence. Green bars = positive contribution, red = negative.</div>
+  el.innerHTML=`<div style="font-size:13px;color:var(--text3);margin-bottom:12px">Mean absolute SHAP value per topological index for the best model of each property.</div>
   <select class="ssel" id="shap-sel" onchange="renderSHAP(this.value)">${props.map(p=>`<option value="${p}">${p}</option>`).join('')}</select>
   <div class="srows" id="shap-rows"></div>`;
   renderSHAP(props[0]);
@@ -850,15 +876,15 @@ function renderSHAP(prop){
   }).join('');
 }
 
-/* TAB 7: Data Preview */
+/* TAB 7 */
 function buildPreview(data){
   const el=document.getElementById('rp-preview');
   const preview=data.drugs_preview||[];
   if(!preview.length){el.innerHTML='<div class="card"><div class="cbody">No data available.</div></div>';return;}
-  const priority=['ChEMBL_ID','SMILES','MolWt','LogP','TPSA','HBD','HBA','RotBonds','PC_XLogP','PC_Complexity','PC_HeavyAtomCount','M1','M2','ABC','R','H','F','W','Sz','GE','Lipinski_Pass','Veber_Pass','PAINS_Pass'];
+  const priority=['ChEMBL_ID','SMILES','MolWt','LogP','TPSA','HBD','HBA','RotBonds','PC_XLogP','PC_Complexity','PC_HeavyAtomCount','M1','M2','ABC','R','H','F','W','Sz','GE','W_v','W_e','Sz_v','Mo_v','PI','Schultz','Gutman','Lipinski_Pass','Veber_Pass','PAINS_Pass'];
   const allCols=Object.keys(preview[0]);
   const cols=[...priority.filter(c=>allCols.includes(c)),...allCols.filter(c=>!priority.includes(c)&&c!=='SMILES')];
-  let html=`<div style="font-size:12px;color:var(--text3);margin-bottom:12px">First 10 drugs · ${cols.length} columns shown · Download CSV or Excel for all ${data.drug_count} drugs and all ${data.columns?.length||0} properties.</div>
+  let html=`<div style="font-size:13px;color:var(--text3);margin-bottom:12px">First 10 drugs · ${cols.length} columns · Download CSV or Excel for all ${data.drug_count} drugs and all ${data.columns?.length||0} properties.</div>
   <div class="tw"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`;
   preview.forEach(row=>{
     html+='<tr>';
