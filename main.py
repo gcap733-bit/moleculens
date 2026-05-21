@@ -79,9 +79,13 @@ def export_excel(disease, df, corr, ml_results, top_models, shap_summaries, out_
     ws["A8"] = "PAINS clean";   ws["B8"] = pains
 
     if not top_models.empty:
-        best = top_models.sort_values("R2_mean", ascending=False).iloc[0]
-        best_r2 = round(float(best["R2_mean"]), 4)
-        best_model_desc = f"{best['Model']} predicting {best['Property']}"
+        try:
+            best = top_models.sort_values("R2_mean", ascending=False).iloc[0]
+            best_r2 = round(float(best["R2_mean"]), 4)
+            best_model_desc = f"{best['Model']} predicting {best['Property']}"
+        except Exception:
+            best_r2 = "N/A"
+            best_model_desc = "N/A (error retrieving best model)"
     else:
         best_r2 = "N/A"
         best_model_desc = "N/A (Insufficient data for ML)"
@@ -391,7 +395,12 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
     except Exception as e:
         print(f"    [!] Correlation failed: {e}")
         corr_data = {"pearson": {}, "pearson_p": {}, "spearman": {}, "spearman_p": {}, "significance": {}, "vif": {}}
-    ml_results, best_models = run_ml_qspr(df)
+    try:
+        ml_results, best_models = run_ml_qspr(df)
+    except Exception as e:
+        print(f"    [!] ML pipeline raised unexpectedly: {e} — continuing without ML")
+        ml_results = pd.DataFrame(columns=["Property", "Model", "R2_mean", "R2_std", "MAE_mean"])
+        best_models = {}
     try:
         shap_summaries = compute_shap(df, best_models)
     except Exception as e:
@@ -413,15 +422,19 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
 
     df.to_csv(csv_path, index=False)
 
-    export_excel(
-        disease=disease,
-        df=df,
-        corr=corr_data,
-        ml_results=ml_results,
-        top_models=top_models,
-        shap_summaries=shap_summaries,
-        out_path=xlsx_path,
-    )
+    try:
+        export_excel(
+            disease=disease,
+            df=df,
+            corr=corr_data,
+            ml_results=ml_results,
+            top_models=top_models,
+            shap_summaries=shap_summaries,
+            out_path=xlsx_path,
+        )
+    except Exception as e:
+        print(f"    [!] Excel export failed: {e} — continuing without Excel file")
+        xlsx_path = None
 
     print(f"\n[*] Pipeline complete")
     print(f"    Drugs processed : {len(df)}")

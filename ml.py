@@ -576,7 +576,7 @@ def run_ml_qspr(df: pd.DataFrame):
         return pd.DataFrame(), {}
 
     X = clean_topo[valid_topo].values.astype(np.float64)
-    valid_idx = clean_topo.index
+    valid_idx = clean_topo.index  # may be non-contiguous after dropna
 
     # Valid targets: numeric, >50% filled
     available_targets = []
@@ -588,66 +588,90 @@ def run_ml_qspr(df: pd.DataFrame):
             available_targets.append(t)
 
     print(f"    [*] Predicting {len(available_targets)} properties: {available_targets}")
-    kf = KFold(n_splits=CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
     all_results = []
     best_models = {}
 
     for prop in available_targets:
-        y_raw = pd.Series([_safe_float(v) for v in df.loc[valid_idx, prop]])
-        mask = y_raw.notna().values
-        X_prop = X[mask]
-        y = y_raw.values[mask].astype(np.float64)
+        # Wrap each property entirely so one bad target never kills the rest
+        try:
+            y_raw = pd.Series([_safe_float(v) for v in df.loc[valid_idx, prop]])
+            mask = y_raw.notna().values          # numpy boolean array
+            X_prop = X[mask].copy()              # fresh contiguous numpy array
+            y = y_raw.values[mask].astype(np.float64)
 
-        if len(y) < 10:
-            print(f"    [!] Skipping {prop}: only {len(y)} valid rows.")
-            continue
-
-        best_r2 = -np.inf
-        best_model_for_prop = None
-
-        for name, (model, param_grid) in MODELS_AND_GRIDS.items():
-            try:
-                pipe = Pipeline([("scaler", StandardScaler()), ("model", model)])
-
-                if param_grid:
-                    gs = GridSearchCV(
-                        pipe, param_grid,
-                        cv=KFold(n_splits=3, shuffle=True, random_state=RANDOM_STATE),
-                        scoring="r2", n_jobs=-1, error_score="raise"
-                    )
-                    gs.fit(X_prop, y)
-                    tuned_pipe = gs.best_estimator_
-                else:
-                    tuned_pipe = pipe
-
-                cv_r2  = cross_val_score(tuned_pipe, X_prop, y, cv=kf, scoring="r2")
-                cv_mae = cross_val_score(tuned_pipe, X_prop, y, cv=kf,
-                                         scoring="neg_mean_absolute_error")
-
-                mean_r2  = float(np.mean(cv_r2))
-                std_r2   = float(np.std(cv_r2))
-                mean_mae = float(-np.mean(cv_mae))
-
-                all_results.append({
-                    "Property": prop, "Model": name,
-                    "R2_mean":  round(mean_r2,  4),
-                    "R2_std":   round(std_r2,   4),
-                    "MAE_mean": round(mean_mae,  4),
-                })
-
-                if mean_r2 > best_r2:
-                    best_r2 = mean_r2
-                    tuned_pipe.fit(X_prop, y)
-                    best_model_for_prop = (tuned_pipe, valid_idx[mask])
-
-            except Exception as e:
-                print(f"    [!] {name} failed for {prop}: {e}")
+            if len(y) < 10:
+                print(f"    [!] Skipping {prop}: only {len(y)} valid rows.")
                 continue
 
-        if best_model_for_prop is not None:
-            best_models[prop] = best_model_for_prop
-            print(f"    [\u2713] {prop}: best R\u00b2={best_r2:.3f}")
+            # Cap fold counts to sample size to prevent KFold/iloc OOB errors
+            outer_splits = max(2, min(CV_FOLDS, len(y)))
+            inner_splits = max(2, min(3, len(y)))
+
+            kf_outer = KFold(n_splits=outer_splits, shuffle=True, random_state=RANDOM_STATE)
+            kf_inner = KFold(n_splits=inner_splits, shuffle=True, random_state=RANDOM_STATE)
+
+            best_r2 = -np.inf
+            best_model_for_prop = None
+
+            for name, (model, param_grid) in MODELS_AND_GRIDS.items():
+                try:
+                    pipe = Pipeline([("scaler", StandardScaler()), ("model", model)])
+
+                    if param_grid:
+                        gs = GridSearchCV(
+                            pipe, param_grid,
+                            cv=kf_inner,
+                            scoring="r2", n_jobs=-1,
+                            error_score=np.nan,  # never raise on fold errors
+                        )
+                        gs.fit(X_prop, y)
+                        tuned_pipe = gs.best_estimator_
+                    else:
+                        tuned_pipe = pipe
+
+                    cv_r2  = cross_val_score(
+                        tuned_pipe, X_prop, y, cv=kf_outer,
+                        scoring="r2", error_score=np.nan
+                    )
+                    cv_mae = cross_val_score(
+                        tuned_pipe, X_prop, y, cv=kf_outer,
+                        scoring="neg_mean_absolute_error",
+                        error_score=np.nan,
+                    )
+
+                    # Use nanmean/nanstd so individual failed folds don't crash
+                    mean_r2  = float(np.nanmean(cv_r2))
+                    std_r2   = float(np.nanstd(cv_r2))
+                    mean_mae = float(-np.nanmean(cv_mae))
+
+                    all_results.append({
+                        "Property": prop, "Model": name,
+                        "R2_mean":  round(mean_r2,  4),
+                        "R2_std":   round(std_r2,   4),
+                        "MAE_mean": round(mean_mae,  4),
+                    })
+
+                    if mean_r2 > best_r2:
+                        best_r2 = mean_r2
+                        tuned_pipe.fit(X_prop, y)
+                        # Store as plain Python list — NOT a pandas Index —
+                        # to prevent SHAP's internal iloc from going OOB on
+                        # non-contiguous indices.
+                        row_indices = list(valid_idx[mask])
+                        best_model_for_prop = (tuned_pipe, row_indices)
+
+                except Exception as e:
+                    print(f"    [!] {name} failed for {prop}: {e}")
+                    continue
+
+            if best_model_for_prop is not None:
+                best_models[prop] = best_model_for_prop
+                print(f"    [\u2713] {prop}: best R\u00b2={best_r2:.3f}")
+
+        except Exception as e:
+            print(f"    [!] Skipping {prop} entirely due to error: {e}")
+            continue
 
     return pd.DataFrame(all_results), best_models
 
@@ -668,8 +692,12 @@ def compute_shap(df: pd.DataFrame, best_models: dict) -> dict:
             inner   = pipe.named_steps["model"]
             scaler  = pipe.named_steps["scaler"]
 
-            # Build X for the rows used in training
-            X_sub = _sanitise_df(df.loc[row_idx], valid_topo)
+            # Build X for the rows used in training.
+            # reset_index ensures a clean 0-based index so SHAP's internal
+            # iloc calls never go out-of-bounds on non-contiguous indices.
+            X_sub = _sanitise_df(
+                df.loc[row_idx].reset_index(drop=True), valid_topo
+            )
             if len(X_sub) == 0:
                 continue
             X_arr     = X_sub[valid_topo].values.astype(np.float64)
