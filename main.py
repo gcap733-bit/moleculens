@@ -1,6 +1,7 @@
 # ==========================================
 # main.py — pipeline orchestrator
 # Run: python main.py --disease diabetes
+# IMPROVED: Now prevents analyzing datasets < 5 drugs
 # ==========================================
 
 import os
@@ -10,7 +11,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import OUTPUT_DIR, MAX_DRUGS
+from config import OUTPUT_DIR, MAX_DRUGS, MIN_DRUGS_ERROR
 from disease_validator import validate_disease_input
 from fetcher import fetch_all
 from ml import (
@@ -385,8 +386,10 @@ def run_pipeline(disease: str, max_drugs: int = MAX_DRUGS) -> dict:
     print(f"{'='*50}\n")
 
     df = fetch_all(disease, max_drugs)
-    if df.empty:
-        return {"error": f"No data found for '{disease}'."}
+    if df.empty or len(df) < MIN_DRUGS_ERROR:
+        error_msg = f"Insufficient data: found {len(df)} drugs (minimum {MIN_DRUGS_ERROR} required) for '{disease}'."
+        print(f"[!] ERROR: {error_msg}")
+        return {"error": error_msg}
 
     df = apply_drug_filters(df)
     df = compute_topological_indices(df)
