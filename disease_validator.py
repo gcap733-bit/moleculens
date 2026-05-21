@@ -148,10 +148,16 @@ def confirm_with_chembl(disease_name: str, min_drugs: int = 10) -> dict:
     """
     try:
         indication_api = new_client.drug_indication
-        indications = indication_api.filter(
+        # Collect IDs up to a cap (500) to avoid iterating thousands of pages
+        ids = set()
+        qs = indication_api.filter(
             mesh_heading__icontains=disease_name
         ).only(['molecule_chembl_id'])
-        count = len(set(ind['molecule_chembl_id'] for ind in indications))
+        for ind in qs:
+            ids.add(ind['molecule_chembl_id'])
+            if len(ids) >= 500:
+                break
+        count = len(ids)
 
         if count == 0:
             return {
