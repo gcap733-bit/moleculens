@@ -6,8 +6,9 @@
 import os
 
 # --- Pipeline ---
-MAX_DRUGS = 100          # max drugs to fetch per disease
+MAX_DRUGS = 200          # max drugs to fetch per disease (increased from 100)
 MIN_DRUGS_WARN = 10      # warn user if fewer drugs found
+MIN_DRUGS_ERROR = 5      # ERROR if fewer than this (was allowing 0)
 TEST_SIZE = 0.2          # train/test split ratio
 CV_FOLDS = 5             # k-fold cross-validation folds
 RANDOM_STATE = 42
