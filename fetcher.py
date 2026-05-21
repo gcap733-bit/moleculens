@@ -33,25 +33,27 @@ def _cache_key(prefix: str, identifier: str) -> str:
 
 def _load_cache(path: str):
     if CACHE_ENABLED and os.path.exists(path):
-        with open(path) as f:
-            return json.load(f)
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            return None
     return None
 
 
 def _save_cache(path: str, data):
     if CACHE_ENABLED:
-        with open(path, "w") as f:
-            json.dump(data, f)
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
 
 
 # ==========================================
 # RETRY WRAPPER
 # ==========================================
 def _with_retry(fn, *args, **kwargs):
-    """
-    Calls fn(*args, **kwargs) up to MAX_RETRIES times with
-    exponential backoff. Returns None on total failure.
-    """
     delay = 1.0
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -67,13 +69,11 @@ def _with_retry(fn, *args, **kwargs):
 
 # ==========================================
 # CHEMBL — drug discovery + base properties
+# FIX: Use list() to materialise full paginated queryset,
+#      then deduplicate and slice in Python — never rely on
+#      len() of a lazy queryset (only gives first page ~20 items).
 # ==========================================
 def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
-    """
-    Fetches drugs for a disease from ChEMBL and computes
-    RDKit descriptors as baseline physicochemical properties.
-    ChEMBL is the only free source for disease-to-drug mapping.
-    """
     print(f"[*] ChEMBL: fetching drugs for '{disease_name}'...")
 
     cache_path = _cache_key("chembl", disease_name)
@@ -82,45 +82,94 @@ def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.Data
         print(f"    [cache] Loaded {len(cached)} drugs from disk.")
         return pd.DataFrame(cached)
 
-    def _fetch():
+    # --- Step 1: Get all ChEMBL IDs for the disease ---
+    def _fetch_ids():
         indication_api = new_client.drug_indication
-        indications = indication_api.filter(
-            mesh_heading__icontains=disease_name
-        ).only(["molecule_chembl_id"])
-        chembl_ids = list(set(ind["molecule_chembl_id"] for ind in indications))
-        if not chembl_ids:
-            return []
+        # Materialise the FULL queryset with list() so we get all pages,
+        # not just the first 20 (ChEMBL default page size).
+        indications = list(
+            indication_api.filter(
+                mesh_heading__icontains=disease_name
+            ).only(["molecule_chembl_id"])
+        )
+        return indications
+
+    indications = _with_retry(_fetch_ids)
+    if not indications:
+        # Fallback: try broader search with parent disease term
+        print(f"    [!] No indications found for '{disease_name}', trying broader terms...")
+        fallback_terms = [disease_name.split()[0]] if ' ' in disease_name else []
+        for term in fallback_terms:
+            def _fetch_fallback(t=term):
+                indication_api = new_client.drug_indication
+                return list(
+                    indication_api.filter(
+                        mesh_heading__icontains=t
+                    ).only(["molecule_chembl_id"])
+                )
+            indications = _with_retry(_fetch_fallback)
+            if indications:
+                print(f"    [*] Fallback term '{term}' found {len(indications)} indications.")
+                break
+
+    if not indications:
+        print(f"    [!] No drugs found for '{disease_name}'.")
+        return pd.DataFrame()
+
+    # Deduplicate ChEMBL IDs in Python (not on the queryset)
+    chembl_ids = list(set(ind['molecule_chembl_id'] for ind in indications))
+    print(f"    [*] Found {len(chembl_ids)} unique ChEMBL IDs for '{disease_name}'.")
+
+    # Limit to max_drugs
+    chembl_ids = chembl_ids[:max_drugs]
+
+    # --- Step 2: Fetch molecule structures in batches ---
+    # ChEMBL has a limit on __in filter size; batch by 50
+    BATCH = 50
+    all_molecules = []
+
+    def _fetch_batch(batch_ids):
         molecule_api = new_client.molecule
         return list(
             molecule_api.filter(
-                molecule_chembl_id__in=chembl_ids[:max_drugs]
+                molecule_chembl_id__in=batch_ids
             ).only(["molecule_chembl_id", "molecule_structures"])
         )
 
-    molecules = _with_retry(_fetch)
-    if not molecules:
-        print(f"    [!] No drugs returned from ChEMBL.")
+    for i in range(0, len(chembl_ids), BATCH):
+        batch = chembl_ids[i:i + BATCH]
+        mols = _with_retry(_fetch_batch, batch)
+        if mols:
+            all_molecules.extend(mols)
+        time.sleep(0.1)
+
+    if not all_molecules:
+        print(f"    [!] No molecule structures retrieved.")
         return pd.DataFrame()
 
+    # --- Step 3: Compute RDKit descriptors ---
     data = []
-    for mol in molecules:
+    for mol in all_molecules:
         try:
-            smiles = mol["molecule_structures"]["canonical_smiles"]
+            structs = mol.get('molecule_structures') or {}
+            smiles = structs.get('canonical_smiles', '')
+            if not smiles:
+                continue
             rd_mol = Chem.MolFromSmiles(smiles)
             if rd_mol is None:
                 continue
             data.append({
                 "ChEMBL_ID": mol["molecule_chembl_id"],
-                "SMILES": smiles,
-                "MolWt":    Descriptors.MolWt(rd_mol),
-                "LogP":     Descriptors.MolLogP(rd_mol),
-                "TPSA":     Descriptors.TPSA(rd_mol),
-                "HBD":      Descriptors.NumHDonors(rd_mol),
-                "HBA":      Descriptors.NumHAcceptors(rd_mol),
-                "RotBonds": Descriptors.NumRotatableBonds(rd_mol),
-                "MolMR":    Descriptors.MolMR(rd_mol),
+                "SMILES":    smiles,
+                "MolWt":     Descriptors.MolWt(rd_mol),
+                "LogP":      Descriptors.MolLogP(rd_mol),
+                "TPSA":      Descriptors.TPSA(rd_mol),
+                "HBD":       Descriptors.NumHDonors(rd_mol),
+                "HBA":       Descriptors.NumHAcceptors(rd_mol),
+                "RotBonds":  Descriptors.NumRotatableBonds(rd_mol),
+                "MolMR":     Descriptors.MolMR(rd_mol),
             })
-        except:
+        except Exception:
             continue
 
     _save_cache(cache_path, data)
@@ -130,9 +179,6 @@ def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.Data
 
 # ==========================================
 # PUBCHEM — 20 physicochemical properties
-# Preferred over ChEMBL for physicochemical props:
-# standardized structures, validated XLogP3, unique
-# properties (Complexity, FormalCharge, stereo counts)
 # ==========================================
 PUBCHEM_PROPS = ",".join([
     "MolecularFormula", "MolecularWeight", "XLogP", "ExactMass",
@@ -179,7 +225,6 @@ def _fetch_pubchem_single(smiles: str) -> dict:
 
 
 def _fetch_pubchem_cached(args):
-    """Worker for parallel PubChem fetching. Returns (index, props)."""
     i, smiles = args
     cache_path = _cache_key("pubchem", smiles)
     cached = _load_cache(cache_path)
@@ -187,16 +232,11 @@ def _fetch_pubchem_cached(args):
         return i, cached
     props = _with_retry(_fetch_pubchem_single, smiles) or {}
     _save_cache(cache_path, props)
-    time.sleep(PUBCHEM_DELAY)  # Respect rate limit per worker
+    time.sleep(PUBCHEM_DELAY)
     return i, props
 
 
 def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fetches PubChem properties in parallel using ThreadPoolExecutor.
-    Uses 5 workers — stays safely within PubChem's 5 req/sec free limit.
-    Results are re-ordered to match original df order.
-    """
     print("[*] PubChem: fetching physicochemical properties (parallel, 5 workers)...")
     smiles_list = list(df["SMILES"])
     results = [None] * len(smiles_list)
@@ -206,12 +246,17 @@ def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
         futures = {executor.submit(_fetch_pubchem_cached, (i, s)): i
                    for i, s in enumerate(smiles_list)}
         for future in as_completed(futures):
-            i, props = future.result()
-            results[i] = props
+            try:
+                i, props = future.result()
+                results[i] = props
+            except Exception:
+                results[futures[future]] = {}
             completed += 1
             if completed % 10 == 0:
                 print(f"    ... {completed}/{len(smiles_list)} done")
 
+    # Fill any None slots
+    results = [r if r is not None else {} for r in results]
     pubchem_df = pd.DataFrame(results)
     print(f"    [✓] PubChem properties added ({len(pubchem_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), pubchem_df.reset_index(drop=True)], axis=1)
@@ -219,21 +264,8 @@ def enrich_with_pubchem(df: pd.DataFrame) -> pd.DataFrame:
 
 # ==========================================
 # pkCSM — ADMET pharmacokinetic properties
-# Only free REST API with full ADMET predictions
-# from SMILES. No API key required.
 # ==========================================
 def _fetch_pkcms_single(smiles: str) -> dict:
-    """
-    pkCSM ADMET prediction — tries multiple endpoints and request formats.
-    pkCSM has historically changed URLs and accepted formats.
-    We try every known combination so at least one works.
-    Strategies:
-      1. biosig.unimelb.edu.au — form-data POST
-      2. biosig.unimelb.edu.au — JSON POST
-      3. biosig.lab.uq.edu.au  — form-data POST (old URL)
-      4. biosig.lab.uq.edu.au  — JSON POST (old URL)
-    If all fail, compute RDKit-based ADMET approximations as fallback.
-    """
     endpoints = [
         ("https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction", "form"),
         ("https://biosig.unimelb.edu.au/pkcsm/api/v1/prediction", "json"),
@@ -265,12 +297,9 @@ def _fetch_pkcms_single(smiles: str) -> dict:
         except Exception:
             continue
 
-    # ── Fallback: RDKit-based ADMET approximations ─────────────────────
-    # When pkCSM is unavailable, compute key ADMET properties locally
-    # using well-established RDKit descriptors and Lipinski-based rules.
+    # Fallback: RDKit-based ADMET approximations
     try:
-        from rdkit import Chem
-        from rdkit.Chem import Descriptors, rdMolDescriptors
+        from rdkit.Chem import rdMolDescriptors
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             return {}
@@ -283,10 +312,9 @@ def _fetch_pkcms_single(smiles: str) -> dict:
         rings = rdMolDescriptors.CalcNumRings(mol)
         arom  = rdMolDescriptors.CalcNumAromaticRings(mol)
 
-        # Absorption approximations (rule-based)
         gi_absorption = "High" if (mw < 500 and logp < 5 and hbd <= 5 and hba <= 10) else "Low"
         bbb_permeant  = "Yes"  if (mw < 400 and logp > 0 and tpsa < 90) else "No"
-        caco2         = round(0.5 - 0.01 * tpsa + 0.02 * logp, 3)  # rough estimate
+        caco2         = round(0.5 - 0.01 * tpsa + 0.02 * logp, 3)
 
         return {
             "ADMET_GI_Absorption":    gi_absorption,
@@ -308,7 +336,6 @@ def _fetch_pkcms_single(smiles: str) -> dict:
 
 
 def _fetch_admet_cached(args):
-    """Worker for parallel pkCSM fetching. Returns (index, props)."""
     i, smiles = args
     cache_path = _cache_key("pkcms", smiles)
     cached = _load_cache(cache_path)
@@ -316,16 +343,11 @@ def _fetch_admet_cached(args):
         return i, cached
     props = _with_retry(_fetch_pkcms_single, smiles) or {}
     _save_cache(cache_path, props)
-    time.sleep(PKCMS_DELAY)  # pkCSM is a free server — be respectful
+    time.sleep(PKCMS_DELAY)
     return i, props
 
 
 def enrich_with_admet(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fetches ADMET properties in parallel using ThreadPoolExecutor.
-    Uses 3 workers — pkCSM is a free academic server so we stay conservative.
-    Same data, same results — just faster.
-    """
     print("[*] pkCSM: fetching ADMET properties (parallel, 3 workers)...")
     smiles_list = list(df["SMILES"])
     results = [None] * len(smiles_list)
@@ -335,25 +357,25 @@ def enrich_with_admet(df: pd.DataFrame) -> pd.DataFrame:
         futures = {executor.submit(_fetch_admet_cached, (i, s)): i
                    for i, s in enumerate(smiles_list)}
         for future in as_completed(futures):
-            i, props = future.result()
-            results[i] = props
+            try:
+                i, props = future.result()
+                results[i] = props
+            except Exception:
+                results[futures[future]] = {}
             completed += 1
             if completed % 10 == 0:
                 print(f"    ... {completed}/{len(smiles_list)} done")
 
+    results = [r if r is not None else {} for r in results]
     admet_df = pd.DataFrame(results)
     print(f"    [✓] ADMET properties added ({len(admet_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), admet_df.reset_index(drop=True)], axis=1)
 
 
 # ==========================================
-# UNICHEM — cross-reference SMILES to other DB IDs
-# UniChem is a free EBI service mapping between
-# chemical databases. We use it to find ChemSpider IDs
-# and ZINC IDs from InChIKey for cross-referencing.
+# UNICHEM — cross-reference IDs
 # ==========================================
 def _smiles_to_inchikey(smiles: str) -> str:
-    """Convert SMILES to InChIKey using RDKit."""
     try:
         from rdkit.Chem.inchi import MolToInchi, InchiToInchiKey
         mol = Chem.MolFromSmiles(smiles)
@@ -361,20 +383,11 @@ def _smiles_to_inchikey(smiles: str) -> str:
             return ""
         inchi = MolToInchi(mol)
         return InchiToInchiKey(inchi) if inchi else ""
-    except:
+    except Exception:
         return ""
 
 
 def _fetch_unichem_ids(inchikey: str) -> dict:
-    """
-    Fetch cross-database IDs from UniChem using multiple API strategies.
-    UniChem has changed its API structure over time — we try v2, v1, and
-    a PubChem-based fallback to ensure we always get cross-DB IDs.
-
-    Strategy 1: UniChem v2 REST API (current)
-    Strategy 2: UniChem v1 REST API (legacy fallback)
-    Strategy 3: PubChem PUG REST — get CID, SID, synonyms from InChIKey
-    """
     if not inchikey:
         return {}
 
@@ -398,7 +411,6 @@ def _fetch_unichem_ids(inchikey: str) -> dict:
         if resp.status_code == 200:
             data = resp.json()
             sources = {}
-            # v2 response: {"compounds": [{"sources": [...]}]}
             compounds = data.get("compounds", [data]) if "compounds" in data else [data]
             for compound in compounds:
                 for src in compound.get("sources", []):
@@ -428,7 +440,7 @@ def _fetch_unichem_ids(inchikey: str) -> dict:
     except Exception:
         pass
 
-    # Strategy 3: PubChem fallback — get CID and synonyms from InChIKey
+    # Strategy 3: PubChem fallback
     try:
         pc_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/{inchikey}/property/IUPACName/JSON"
         pc_resp = requests.get(pc_url, timeout=10)
@@ -439,12 +451,6 @@ def _fetch_unichem_ids(inchikey: str) -> dict:
             result = {}
             if cid:
                 result["UC_PubChem_CID_from_IK"] = str(cid)
-                # Also try to get SID from PubChem
-                sid_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/sids/JSON"
-                sid_resp = requests.get(sid_url, timeout=10)
-                if sid_resp.status_code == 200:
-                    sids = sid_resp.json().get("InformationList", {}).get("Information", [{}])[0].get("SID", [])
-                    result["UC_PubChem_SID"] = str(sids[0]) if sids else ""
             return result
     except Exception:
         pass
@@ -453,7 +459,6 @@ def _fetch_unichem_ids(inchikey: str) -> dict:
 
 
 def _fetch_unichem_cached(args):
-    """Worker for parallel UniChem fetching. Returns (index, ids_dict)."""
     i, smiles = args
     cache_path = _cache_key("unichem", smiles)
     cached = _load_cache(cache_path)
@@ -468,10 +473,6 @@ def _fetch_unichem_cached(args):
 
 
 def enrich_with_unichem(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Adds cross-database IDs and InChIKey to every drug in parallel.
-    Uses 8 workers — UniChem is a robust EBI API that handles concurrency well.
-    """
     print("[*] UniChem: fetching cross-database IDs (parallel, 8 workers)...")
     smiles_list = list(df["SMILES"])
     results = [None] * len(smiles_list)
@@ -481,12 +482,16 @@ def enrich_with_unichem(df: pd.DataFrame) -> pd.DataFrame:
         futures = {executor.submit(_fetch_unichem_cached, (i, s)): i
                    for i, s in enumerate(smiles_list)}
         for future in as_completed(futures):
-            i, ids = future.result()
-            results[i] = ids
+            try:
+                i, ids = future.result()
+                results[i] = ids
+            except Exception:
+                results[futures[future]] = {}
             completed += 1
             if completed % 10 == 0:
                 print(f"    ... {completed}/{len(smiles_list)} done")
 
+    results = [r if r is not None else {} for r in results]
     unichem_df = pd.DataFrame(results)
     print(f"    [✓] UniChem IDs added ({len(unichem_df.columns)} columns).")
     return pd.concat([df.reset_index(drop=True), unichem_df.reset_index(drop=True)], axis=1)
@@ -494,15 +499,8 @@ def enrich_with_unichem(df: pd.DataFrame) -> pd.DataFrame:
 
 # ==========================================
 # CHEMBL BIOACTIVITY — IC50, Ki, EC50 per drug
-# These are experimental activity values from ChEMBL
-# assays — more informative than just structural props.
 # ==========================================
 def fetch_chembl_bioactivity(chembl_ids: list) -> pd.DataFrame:
-    """
-    For each drug, fetches best available bioactivity value
-    (IC50, Ki, EC50, Kd) from ChEMBL assays.
-    Returns DataFrame indexed by ChEMBL_ID with activity columns.
-    """
     print("[*] ChEMBL: fetching bioactivity data (IC50/Ki/EC50)...")
     activity_api = new_client.activity
     records = {}
@@ -514,10 +512,11 @@ def fetch_chembl_bioactivity(chembl_ids: list) -> pd.DataFrame:
             records[cid] = cached
             continue
         try:
-            acts = activity_api.filter(
+            # Materialise with list() to avoid pagination issues
+            acts = list(activity_api.filter(
                 molecule_chembl_id=cid,
                 standard_type__in=["IC50", "Ki", "EC50", "Kd"],
-            ).only(["standard_type", "standard_value", "standard_units", "assay_type"])
+            ).only(["standard_type", "standard_value", "standard_units", "assay_type"]))
             best = {"BIO_IC50": None, "BIO_Ki": None, "BIO_EC50": None, "BIO_Kd": None}
             for a in acts:
                 key = f"BIO_{a.get('standard_type','')}"
@@ -525,12 +524,12 @@ def fetch_chembl_bioactivity(chembl_ids: list) -> pd.DataFrame:
                 if key in best and best[key] is None and val:
                     try:
                         best[key] = float(val)
-                    except:
+                    except Exception:
                         pass
             _save_cache(cache_path, best)
             records[cid] = best
             time.sleep(0.1)
-        except:
+        except Exception:
             records[cid] = {"BIO_IC50": None, "BIO_Ki": None, "BIO_EC50": None, "BIO_Kd": None}
 
     bio_df = pd.DataFrame.from_dict(records, orient="index").reset_index()
@@ -543,15 +542,6 @@ def fetch_chembl_bioactivity(chembl_ids: list) -> pd.DataFrame:
 # FULL FETCH PIPELINE
 # ==========================================
 def fetch_all(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
-    """
-    Orchestrates all data sources in order:
-    1. ChEMBL  — drug discovery + base RDKit properties
-    2. PubChem — 20 physicochemical properties
-    3. pkCSM   — ADMET pharmacokinetic properties
-    4. UniChem — cross-database IDs (ChemSpider, ZINC, DrugBank, ChEBI)
-    5. ChEMBL Bioactivity — IC50, Ki, EC50, Kd values
-    Returns a single merged DataFrame ready for ML.
-    """
     df = fetch_chembl_drugs(disease_name, max_drugs)
     if df.empty:
         return df
@@ -559,24 +549,23 @@ def fetch_all(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
     df = enrich_with_admet(df)
     df = enrich_with_unichem(df)
 
-    # Bioactivity — merge on ChEMBL_ID
     if "ChEMBL_ID" in df.columns:
         bio_df = fetch_chembl_bioactivity(df["ChEMBL_ID"].tolist())
         df = df.merge(bio_df, on="ChEMBL_ID", how="left")
 
-    # ── Coerce all non-string columns to numeric where possible ──
-    # This prevents numpy dtype compatibility errors downstream
-    skip_cols = {"ChEMBL_ID", "SMILES", "InChIKey", "PC_MolecularFormula",
-                 "UC_ChEMBL_ID", "UC_DrugBank_ID", "UC_ChemSpider_ID",
-                 "UC_ZINC_ID", "UC_PubChem_SID", "UC_ChEBI_ID",
-                 "UC_BindingDB_ID", "UC_SureChEMBL_ID", "UC_FDA_SRS_ID",
-                 "UC_Comptox_ID", "UC_PubChem_CID_from_IK", "ADMET_Source",
-                 "ADMET_GI_Absorption", "ADMET_BBB_Permeant"}
+    # Coerce numeric columns
+    skip_cols = {
+        "ChEMBL_ID", "SMILES", "InChIKey", "PC_MolecularFormula",
+        "UC_ChEMBL_ID", "UC_DrugBank_ID", "UC_ChemSpider_ID",
+        "UC_ZINC_ID", "UC_PubChem_SID", "UC_ChEBI_ID",
+        "UC_BindingDB_ID", "UC_SureChEMBL_ID", "UC_FDA_SRS_ID",
+        "UC_Comptox_ID", "UC_PubChem_CID_from_IK", "ADMET_Source",
+        "ADMET_GI_Absorption", "ADMET_BBB_Permeant"
+    }
     for col in df.columns:
         if col not in skip_cols:
             try:
                 converted = pd.to_numeric(df[col], errors='coerce')
-                # Only replace if conversion produced at least some non-NaN values
                 if converted.notna().sum() > 0:
                     df[col] = converted
             except Exception:
