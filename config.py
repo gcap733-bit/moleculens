@@ -28,7 +28,7 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
 
 # --- FastAPI ---
 API_HOST = "0.0.0.0"
-API_PORT = 8000
+API_PORT = int(os.environ.get("PORT", 5000))
 CORS_ORIGINS = ["*"]     # restrict this in production
 
 # --- Topological indices computed: 39 Original + 11 New = 50 Total ---
