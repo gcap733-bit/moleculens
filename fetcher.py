@@ -1,6 +1,7 @@
 # ==========================================
 # fetcher.py — data fetching with retries + disk caching
 # Sources: ChEMBL, PubChem, pkCSM
+# IMPROVED: Multi-strategy fallback for broader disease searches
 # ==========================================
 
 import os
@@ -69,9 +70,8 @@ def _with_retry(fn, *args, **kwargs):
 
 # ==========================================
 # CHEMBL — drug discovery + base properties
-# FIX: Use list() to materialise full paginated queryset,
-#      then deduplicate and slice in Python — never rely on
-#      len() of a lazy queryset (only gives first page ~20 items).
+# FIX: Multi-strategy fallback for broader searches
+# IMPROVED: Uses list() to materialise full paginated queryset
 # ==========================================
 def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.DataFrame:
     print(f"[*] ChEMBL: fetching drugs for '{disease_name}'...")
@@ -82,11 +82,11 @@ def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.Data
         print(f"    [cache] Loaded {len(cached)} drugs from disk.")
         return pd.DataFrame(cached)
 
-    # --- Step 1: Get all ChEMBL IDs for the disease ---
-    def _fetch_ids():
+    chembl_ids = []
+    
+    # Strategy 1: Exact disease name with mesh_heading
+    def _fetch_ids_mesh():
         indication_api = new_client.drug_indication
-        # Materialise the FULL queryset with list() so we get all pages,
-        # not just the first 20 (ChEMBL default page size).
         indications = list(
             indication_api.filter(
                 mesh_heading__icontains=disease_name
@@ -94,37 +94,64 @@ def fetch_chembl_drugs(disease_name: str, max_drugs: int = MAX_DRUGS) -> pd.Data
         )
         return indications
 
-    indications = _with_retry(_fetch_ids)
-    if not indications:
-        # Fallback: try broader search with parent disease term
-        print(f"    [!] No indications found for '{disease_name}', trying broader terms...")
-        fallback_terms = [disease_name.split()[0]] if ' ' in disease_name else []
-        for term in fallback_terms:
-            def _fetch_fallback(t=term):
-                indication_api = new_client.drug_indication
-                return list(
-                    indication_api.filter(
-                        mesh_heading__icontains=t
-                    ).only(["molecule_chembl_id"])
-                )
-            indications = _with_retry(_fetch_fallback)
-            if indications:
-                print(f"    [*] Fallback term '{term}' found {len(indications)} indications.")
-                break
+    indications = _with_retry(_fetch_ids_mesh)
+    if indications:
+        chembl_ids = list(set(ind['molecule_chembl_id'] for ind in indications))
+        print(f"    [*] Strategy 1 (mesh): Found {len(chembl_ids)} unique ChEMBL IDs")
 
-    if not indications:
-        print(f"    [!] No drugs found for '{disease_name}'.")
+    # Strategy 2: Try disease name without filtering (broader search)
+    if len(chembl_ids) < 20:
+        print(f"    [*] Only {len(chembl_ids)} drugs found. Trying broader strategy...")
+        def _fetch_ids_broad():
+            indication_api = new_client.drug_indication
+            try:
+                indications = list(
+                    indication_api.search(disease_name).only(["molecule_chembl_id"])
+                )
+                return indications
+            except Exception:
+                return []
+        
+        broader_indications = _with_retry(_fetch_ids_broad) or []
+        broader_ids = list(set(ind['molecule_chembl_id'] for ind in broader_indications))
+        print(f"    [*] Strategy 2 (search): Found {len(broader_ids)} unique ChEMBL IDs")
+        chembl_ids.extend(broader_ids)
+        chembl_ids = list(set(chembl_ids))
+
+    # Strategy 3: Try individual disease keywords
+    if len(chembl_ids) < 30 and ' ' in disease_name:
+        print(f"    [*] Trying individual keywords from '{disease_name}'...")
+        keywords = disease_name.split()[:3]
+        for keyword in keywords:
+            if len(chembl_ids) >= 50:
+                break
+            def _fetch_ids_keyword(kw=keyword):
+                indication_api = new_client.drug_indication
+                try:
+                    indications = list(
+                        indication_api.search(kw).only(["molecule_chembl_id"])
+                    )
+                    return indications
+                except Exception:
+                    return []
+            
+            keyword_indications = _with_retry(_fetch_ids_keyword) or []
+            keyword_ids = list(set(ind['molecule_chembl_id'] for ind in keyword_indications))
+            if keyword_ids:
+                print(f"    [*] Keyword '{keyword}': Found {len(keyword_ids)} IDs")
+                chembl_ids.extend(keyword_ids)
+                chembl_ids = list(set(chembl_ids))
+
+    if not chembl_ids:
+        print(f"    [!] No drugs found for '{disease_name}' after all strategies.")
         return pd.DataFrame()
 
-    # Deduplicate ChEMBL IDs in Python (not on the queryset)
-    chembl_ids = list(set(ind['molecule_chembl_id'] for ind in indications))
-    print(f"    [*] Found {len(chembl_ids)} unique ChEMBL IDs for '{disease_name}'.")
+    print(f"    [*] Total unique ChEMBL IDs found: {len(chembl_ids)}")
 
     # Limit to max_drugs
     chembl_ids = chembl_ids[:max_drugs]
 
     # --- Step 2: Fetch molecule structures in batches ---
-    # ChEMBL has a limit on __in filter size; batch by 50
     BATCH = 50
     all_molecules = []
 
