@@ -20,11 +20,14 @@ MAX_RETRIES   = 3        # retry attempts on network failure
 RETRY_BACKOFF = 2.0      # exponential backoff multiplier
 
 # --- Caching ---
-CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache")
+# On Vercel the project filesystem is read-only; /tmp is the only writable area.
+_ON_VERCEL = os.environ.get("VERCEL") == "1"
+_BASE_DIR  = "/tmp" if _ON_VERCEL else os.path.dirname(__file__)
+CACHE_DIR  = os.path.join(_BASE_DIR, ".cache")
 CACHE_ENABLED = True
 
 # --- Output ---
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
+OUTPUT_DIR = os.path.join(_BASE_DIR, "outputs")
 
 # --- FastAPI ---
 API_HOST = "0.0.0.0"
@@ -105,3 +108,4 @@ ML_TARGETS = [
     # Bioactivity (4) — only used if data available
     "BIO_IC50", "BIO_Ki", "BIO_EC50", "BIO_Kd",
 ]
+
