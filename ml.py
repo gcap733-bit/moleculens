@@ -1,8 +1,9 @@
 # ==========================================
 # ml.py — topological indices, ML, SHAP, filters
-# FIXED: Pure Python Floyd-Warshall replaced with RDKit C++ distance matrix (100x faster)
-# FIXED: dropna(subset=all_keys) was dropping ALL drugs with any NaN — now fills NaN with 0
-# FIXED: GridSearchCV param grids reduced for reasonable run time
+# Updated: 135 topological indices (50 original + 85 new)
+#   New additions from:
+#     degreessum_computation.py           → 30 SS_ neighbour-degree-sum variants
+#     degree_reverse_computation.py       → 11 new degree-based + 44 Rk reverse variants
 # ==========================================
 
 import math
@@ -62,18 +63,26 @@ def _sanitise_df(df, cols):
 
 
 # ==========================================
+# HELPER: k-th reverse degree (from degree_reverse_computation.py)
+# R_k(v) = Δ - d(v) + k          when k ≤ d(v)
+#           (Δ - d(v) + k) mod Δ  otherwise
+# ==========================================
+def _rev_deg_k(d_val: int, k: int, delta: int) -> int:
+    if delta == 0:
+        return 0
+    if k <= d_val:
+        return delta - d_val + k
+    else:
+        return (delta - d_val + k) % delta
+
+
+# ==========================================
 # DISTANCE MATRIX — uses RDKit C++ implementation (fast)
-# Returns numpy array; disconnected pairs get value 1e8
 # ==========================================
 def _get_distance_matrix(mol):
-    """
-    Returns shortest-path distance matrix as a 2D list using RDKit's C++ engine.
-    Disconnected pairs are represented as float('inf').
-    """
     n = mol.GetNumAtoms()
     try:
         dm = rdmolops.GetDistanceMatrix(mol)
-        # RDKit uses 1e8 for disconnected atoms; convert to inf
         INF = float('inf')
         result = []
         for i in range(n):
@@ -84,7 +93,6 @@ def _get_distance_matrix(mol):
             result.append(row)
         return result
     except Exception:
-        # Pure Python fallback (only if RDKit fails)
         INF = float('inf')
         dist = [[INF] * n for _ in range(n)]
         for i in range(n):
@@ -102,41 +110,21 @@ def _get_distance_matrix(mol):
 
 
 # ==========================================
-# HOSOYA Z INDEX — iterative DP (replaces exponential recursion)
-# For large molecules (>20 bonds) uses an approximation.
+# HOSOYA Z INDEX — iterative DP
 # ==========================================
 def _hosoya_z(edge_list, n_atoms):
-    """
-    Compute Hosoya Z index (total number of matchings) using iterative DP.
-    Falls back to simple approximation for very large molecules.
-    """
     m = len(edge_list)
     if m == 0:
         return 1.0
-
-    # For large molecules use approximation to avoid excessive compute
     if m > 25:
-        # Approximation: use the number of edges and nodes
         return float(1 + m + m * (m - 1) // 4)
-
-    # Iterative matching enumeration using bitmask DP
-    # p[k] = number of matchings of size k
-    p = [0] * (m + 1)
-    p[0] = 1
-
-    # Process edges one by one
-    atom_used = [False] * n_atoms
-    stack = [(0, 0, [False] * n_atoms)]  # (edge_idx, matching_size, atom_used)
-
     p = [0] * (m // 2 + 2)
     p[0] = 1
 
     def _count(idx, used):
         if idx == m:
             return
-        # Skip this edge
         _count(idx + 1, used)
-        # Take this edge if both atoms free
         u, v = edge_list[idx]
         if not used[u] and not used[v]:
             used[u] = used[v] = True
@@ -146,36 +134,36 @@ def _hosoya_z(edge_list, n_atoms):
             _count(idx + 1, used)
             used[u] = used[v] = False
 
-    # Only run for small molecules
     if m <= 18:
         used = [False] * n_atoms
         _count(0, used)
-
     return float(sum(p))
 
 
 # ==========================================
-# ALGORITHM 1: 50 Topological Indices
-# FIXED: NaN values are now filled with 0 instead of dropping entire drugs
+# ALGORITHM 1: 135 Topological Indices
 # ==========================================
 def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
-    print("[*] Computing 50 topological indices...")
+    print("[*] Computing 135 topological indices...")
     all_keys = TOPO_INDICES
-    results = {k: [] for k in all_keys}
+    results = {key: [] for key in all_keys}
 
     for smiles in df["SMILES"]:
         try:
             mol = Chem.RemoveHs(Chem.MolFromSmiles(str(smiles)))
             if mol is None:
                 raise ValueError("Invalid SMILES")
-            n = mol.GetNumAtoms()
+            n       = mol.GetNumAtoms()
             m_bonds = mol.GetNumBonds()
-            INF = float("inf")
+            INF     = float("inf")
 
             degrees = [a.GetDegree() for a in mol.GetAtoms()]
             deg_sum = sum(degrees)
+            delta   = max(degrees) if degrees else 0   # max degree Δ (for Rk)
 
-            # ── Original degree-based ──────────────────────
+            # ──────────────────────────────────────────────
+            # BLOCK 1 — Original degree-based (9)
+            # ──────────────────────────────────────────────
             m1 = m2 = abc = r = h = f = azi = ga = sc = 0.0
             for d in degrees:
                 m1 += d * d
@@ -186,19 +174,21 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 v = bond.GetEndAtom().GetDegree()
                 if u == 0 or v == 0:
                     continue
-                uv = u * v
-                uv_s = u + v
-                m2  += uv
-                r   += 1.0 / math.sqrt(uv)
-                h   += 2.0 / uv_s
-                sc  += 1.0 / math.sqrt(uv_s)
-                ga  += 2.0 * math.sqrt(uv) / uv_s
+                uv    = u * v
+                uv_s  = u + v
+                m2   += uv
+                r    += 1.0 / math.sqrt(uv)
+                h    += 2.0 / uv_s
+                sc   += 1.0 / math.sqrt(uv_s)
+                ga   += 2.0 * math.sqrt(uv) / uv_s
                 if uv_s - 2 > 0:
                     abc += math.sqrt((uv_s - 2) / uv)
                 if uv_s - 2 != 0:
                     azi += (uv / (uv_s - 2)) ** 3
 
-            # ── New degree-based ───────────────────────────
+            # ──────────────────────────────────────────────
+            # BLOCK 2 — New degree-based (11)
+            # ──────────────────────────────────────────────
             bm = tm = gh = gbm = gtm = hg = bmg = bmh = tmg = tmh = sdd = 0.0
             for bond in mol.GetBonds():
                 u = bond.GetBeginAtom().GetDegree()
@@ -229,7 +219,9 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 bmh += (suv + pruv) * suv / 2.0
                 tmh += (suv2 + pruv) * suv / 2.0
 
-            # ── Reverse-degree ─────────────────────────────
+            # ──────────────────────────────────────────────
+            # BLOCK 3 — Reverse-degree (9)  rd(v) = n+1-d(v)
+            # ──────────────────────────────────────────────
             rev_deg = [n + 1 - d for d in degrees]
             rm1 = rm2 = rabc = rr = rh = rf = rga = rbm = rsdd = 0.0
             for d in rev_deg:
@@ -255,7 +247,9 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 if rpruv > 0 and num_rabc > 0:
                     rabc += math.sqrt(num_rabc / rpruv)
 
-            # ── Degree-sum ─────────────────────────────────
+            # ──────────────────────────────────────────────
+            # BLOCK 4 — Degree-sum edge variants (5)
+            # ──────────────────────────────────────────────
             ds1 = ds2 = dsr = dsh = dsga = 0.0
             for bond in mol.GetBonds():
                 u = bond.GetBeginAtom().GetDegree()
@@ -267,11 +261,45 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 ds2  += s * s
                 dsr  += 1.0 / math.sqrt(s)
                 dsh  += 2.0 / s
-                uv = u * v
-                if uv > 0:
-                    dsga += 2.0 * math.sqrt(uv) / s
+                uv_p = u * v
+                if uv_p > 0:
+                    dsga += 2.0 * math.sqrt(uv_p) / s
 
-            # ── Graph entropy ──────────────────────────────
+            # ──────────────────────────────────────────────
+            # BLOCK 5 — NEW: Additional normal degree-based (11)
+            # Source: degree_reverse_computation_orderedIndices.py
+            # ──────────────────────────────────────────────
+            a_idx = g_idx = ha_idx = so_idx = abc_sc_idx = isi_idx = sigma_idx = 0.0
+            hbm_idx = htm_idx = bma_idx = tma_idx = 0.0
+            for bond in mol.GetBonds():
+                u = bond.GetBeginAtom().GetDegree()
+                v = bond.GetEndAtom().GetDegree()
+                if u == 0 or v == 0:
+                    continue
+                suv  = float(u + v)
+                pruv = float(u * v)
+                u2v2 = float(u*u + v*v)
+
+                a_idx     += suv / 2.0
+                g_idx     += math.sqrt(pruv)
+                ha_idx    += 4.0 / (suv ** 2)
+                so_idx    += math.sqrt(u2v2)
+                if pruv > 0 and suv > 2:
+                    abc_sc_idx += math.sqrt((suv - 2) / pruv) / math.sqrt(suv)
+                isi_idx   += pruv / suv
+                sigma_idx += float((u - v) ** 2)
+                d_hbm = (suv + pruv) * suv
+                if d_hbm != 0:
+                    hbm_idx += 2.0 / d_hbm
+                d_htm = (u2v2 + pruv) * suv
+                if d_htm != 0:
+                    htm_idx += 2.0 / d_htm
+                bma_idx += (2.0 / suv) * (suv + pruv)
+                tma_idx += (2.0 / suv) * (u2v2 + pruv)
+
+            # ──────────────────────────────────────────────
+            # BLOCK 6 — Graph entropy
+            # ──────────────────────────────────────────────
             ge = 0.0
             if deg_sum > 0:
                 for d in degrees:
@@ -279,7 +307,9 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                         p = d / float(deg_sum)
                         ge -= p * math.log2(p)
 
-            # ── Distance-based — using RDKit C++ distance matrix ──
+            # ──────────────────────────────────────────────
+            # BLOCK 7 — Distance-based (W, J, Z, Sz, GE)
+            # ──────────────────────────────────────────────
             dist = _get_distance_matrix(mol)
             w = sum(
                 dist[i][j]
@@ -304,14 +334,12 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                         j_sum += 1.0 / math.sqrt(sb * se)
                 j_bal = (m_bonds / cyclo) * j_sum
 
-            # Hosoya Z — iterative DP
             edge_list = [
                 (b.GetBeginAtomIdx(), b.GetEndAtomIdx())
                 for b in mol.GetBonds()
             ]
             z_hosoya = _hosoya_z(edge_list, n)
 
-            # Szeged
             sz = 0.0
             for bond in mol.GetBonds():
                 ui = bond.GetBeginAtomIdx()
@@ -330,13 +358,13 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                 )
                 sz += float(n_u * n_v)
 
-            # ── Advanced distance-based indices ──
+            # ──────────────────────────────────────────────
+            # BLOCK 8 — Advanced cut-graph indices (11)
+            # ──────────────────────────────────────────────
             w_v = float(w)
-
             bonds = list(mol.GetBonds())
             num_bonds = len(bonds)
 
-            # W_e (Edge Wiener)
             w_e = 0.0
             for idx1 in range(num_bonds):
                 for idx2 in range(idx1 + 1, num_bonds):
@@ -351,7 +379,6 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                     if d_min != INF:
                         w_e += float(d_min + 1)
 
-            # W_ve (Vertex-edge Wiener)
             w_ve = 0.0
             for i in range(n):
                 for bond in bonds:
@@ -361,29 +388,23 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                     if d_val != INF:
                         w_ve += float(d_val)
 
-            sz_v = float(sz)
-
-            sz_e = 0.0
-            sz_ve = 0.0
-            mo_v = 0.0
-            mo_e = 0.0
-            pi_val = 0.0
+            sz_v  = float(sz)
+            sz_e  = sz_ve = mo_v = mo_e = pi_val = 0.0
 
             for bond in bonds:
                 u = bond.GetBeginAtomIdx()
                 v = bond.GetEndAtomIdx()
-
                 n_u = sum(
                     1 for k2 in range(n)
-                    if dist[u][k2] != INF and dist[v][k2] != INF and dist[u][k2] < dist[v][k2]
+                    if dist[u][k2] != INF and dist[v][k2] != INF
+                    and dist[u][k2] < dist[v][k2]
                 )
                 n_v = sum(
                     1 for k2 in range(n)
-                    if dist[u][k2] != INF and dist[v][k2] != INF and dist[v][k2] < dist[u][k2]
+                    if dist[u][k2] != INF and dist[v][k2] != INF
+                    and dist[v][k2] < dist[u][k2]
                 )
-
-                m_u = 0
-                m_v = 0
+                m_u = m_v = 0
                 for f_bond in bonds:
                     x = f_bond.GetBeginAtomIdx()
                     y = f_bond.GetEndAtomIdx()
@@ -394,7 +415,6 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                             m_u += 1
                         elif d_f_v < d_f_u:
                             m_v += 1
-
                 sz_e  += float(m_u * m_v)
                 sz_ve += 0.5 * (n_u * m_v + n_v * m_u)
                 mo_v  += float(abs(n_u - n_v))
@@ -403,7 +423,6 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
 
             sz_ve = float(sz_ve)
 
-            # Schultz
             schultz = 0.0
             for i in range(n):
                 d_i = degrees[i]
@@ -413,7 +432,6 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                     if d_ij != INF:
                         schultz += float((d_i + d_j) * d_ij)
 
-            # Gutman
             gutman = 0.0
             for i in range(n):
                 d_i = degrees[i]
@@ -423,42 +441,209 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
                     if d_ij != INF:
                         gutman += float(d_i * d_j * d_ij)
 
+            # ──────────────────────────────────────────────
+            # BLOCK 9 — NEW: Neighbour-degree-sum (SS_) variants (30)
+            # Source: degreessum_computation.py
+            # σ(v) = Σ_{u~v} d(u)
+            # ──────────────────────────────────────────────
+            deg_sum_map = {}
+            for atom in mol.GetAtoms():
+                deg_sum_map[atom.GetIdx()] = sum(
+                    nbr.GetDegree() for nbr in atom.GetNeighbors()
+                )
+
+            ss_m1 = ss_m2 = ss_bm = ss_tm = ss_sc = ss_gh = ss_r = ss_gbm = 0.0
+            ss_a  = ss_g  = ss_ga = ss_h  = ss_hg = ss_hm = ss_hbm = ss_htm = 0.0
+            ss_sdd = ss_ha = ss_so = ss_bmg = ss_abc = ss_bmh = ss_az = 0.0
+            ss_bma = ss_isi = ss_tmh = ss_abs = ss_tma = ss_sigma = ss_tmg = 0.0
+
+            for bond in mol.GetBonds():
+                x = deg_sum_map[bond.GetBeginAtom().GetIdx()]
+                y = deg_sum_map[bond.GetEndAtom().GetIdx()]
+                if x == 0 or y == 0:
+                    continue
+                xs   = float(x + y)
+                xy   = float(x * y)
+                x2y2 = float(x*x + y*y)
+                sqxy = math.sqrt(xy)
+
+                ss_m1    += xs
+                ss_m2    += xy
+                ss_bm    += xs + xy
+                ss_tm    += x2y2 + xy
+                ss_sc    += 1.0 / math.sqrt(xs)
+                ss_gh    += sqxy * xs / 2.0
+                ss_r     += 1.0 / sqxy
+                d_ss_gbm  = xs + xy
+                if d_ss_gbm != 0:
+                    ss_gbm += sqxy / d_ss_gbm
+                ss_a     += xs / 2.0
+                ss_g     += sqxy
+                ss_ga    += 2.0 * sqxy / xs
+                ss_h     += 2.0 / xs
+                d_ss_hg   = sqxy * xs
+                if d_ss_hg != 0:
+                    ss_hg += 2.0 / d_ss_hg
+                ss_hm    += xs ** 2
+                d_ss_hbm  = (xs + xy) * xs
+                if d_ss_hbm != 0:
+                    ss_hbm += 2.0 / d_ss_hbm
+                d_ss_htm  = (x2y2 + xy) * xs
+                if d_ss_htm != 0:
+                    ss_htm += 2.0 / d_ss_htm
+                if xy != 0:
+                    ss_sdd += x2y2 / xy
+                ss_ha    += 4.0 / (xs ** 2)
+                ss_so    += math.sqrt(x2y2)
+                if sqxy != 0:
+                    ss_bmg += (xs + xy) / sqxy
+                if xs + xy - 2 > 0 and xy > 0:
+                    ss_abc += math.sqrt((xs + xy - 2) / xy)
+                    ss_az  += ((xy / (xs + xy - 2)) ** 3)
+                    ss_abs += math.sqrt((xs + xy - 2) / xs)
+                ss_bmh   += (xs + xy) * xs / 2.0
+                ss_bma   += (2.0 / xs) * (xs + xy)
+                ss_isi   += xy / xs
+                ss_tmh   += (x2y2 + xy) * xs / 2.0
+                ss_tma   += (2.0 / xs) * (x2y2 + xy)
+                ss_sigma += float((x - y) ** 2)
+                if sqxy != 0:
+                    ss_tmg += (x2y2 + xy) / sqxy
+
+            # ──────────────────────────────────────────────
+            # BLOCK 10 — NEW: Rk reverse variants of new 11 indices (k=1..4)
+            # Source: degree_reverse_computation_orderedIndices.py
+            # ──────────────────────────────────────────────
+            rk_all = {}
+            for ki in range(1, 5):      # ki = k, renamed to avoid shadowing loop var
+                rk_a = rk_g = rk_ha = rk_so = rk_abc_sc = rk_isi = rk_sigma = 0.0
+                rk_hbm = rk_htm = rk_bma = rk_tma = 0.0
+
+                for bond in mol.GetBonds():
+                    du = bond.GetBeginAtom().GetDegree()
+                    dv = bond.GetEndAtom().GetDegree()
+                    if delta == 0:
+                        continue
+                    ru = _rev_deg_k(du, ki, delta)
+                    rv = _rev_deg_k(dv, ki, delta)
+                    if ru == 0 or rv == 0:
+                        continue
+                    rsuv  = float(ru + rv)
+                    rpruv = float(ru * rv)
+                    ru2v2 = float(ru*ru + rv*rv)
+
+                    rk_a      += rsuv / 2.0
+                    rk_g      += math.sqrt(rpruv)
+                    rk_ha     += 4.0 / (rsuv ** 2)
+                    rk_so     += math.sqrt(ru2v2)
+                    if rpruv > 0 and rsuv > 2:
+                        rk_abc_sc += math.sqrt((rsuv - 2) / rpruv) / math.sqrt(rsuv)
+                    rk_isi    += rpruv / rsuv
+                    rk_sigma  += float((ru - rv) ** 2)
+                    d_rk_hbm   = (rsuv + rpruv) * rsuv
+                    if d_rk_hbm != 0:
+                        rk_hbm += 2.0 / d_rk_hbm
+                    d_rk_htm   = (ru2v2 + rpruv) * rsuv
+                    if d_rk_htm != 0:
+                        rk_htm += 2.0 / d_rk_htm
+                    rk_bma    += (2.0 / rsuv) * (rsuv + rpruv)
+                    rk_tma    += (2.0 / rsuv) * (ru2v2 + rpruv)
+
+                rk_all[f"R{ki}_A"]      = rk_a
+                rk_all[f"R{ki}_G"]      = rk_g
+                rk_all[f"R{ki}_HA"]     = rk_ha
+                rk_all[f"R{ki}_SO"]     = rk_so
+                rk_all[f"R{ki}_ABC_SC"] = rk_abc_sc
+                rk_all[f"R{ki}_ISI"]    = rk_isi
+                rk_all[f"R{ki}_sigma"]  = rk_sigma
+                rk_all[f"R{ki}_HBM"]    = rk_hbm
+                rk_all[f"R{ki}_HTM"]    = rk_htm
+                rk_all[f"R{ki}_BMA"]    = rk_bma
+                rk_all[f"R{ki}_TMA"]    = rk_tma
+
+            # ──────────────────────────────────────────────
+            # Assemble val_map for all 135 indices
+            # ──────────────────────────────────────────────
             val_map = {
-                "M1": m1, "M2": m2, "ABC": abc, "R": r, "H": h, "F": f, "AZI": azi, "GA": ga, "SC": sc,
-                "BM": bm, "TM": tm, "GH": gh, "GBM": gbm, "GTM": gtm, "HG": hg, "BMG": bmg, "BMH": bmh, "TMG": tmg, "TMH": tmh, "SDD": sdd,
-                "RM1": rm1, "RM2": rm2, "RABC": rabc, "RR": rr, "RH": rh, "RF": rf, "RGA": rga, "RBM": rbm, "RSDD": rsdd,
+                # ── Original degree-based (9) ──
+                "M1": m1, "M2": m2, "ABC": abc, "R": r, "H": h,
+                "F": f, "AZI": azi, "GA": ga, "SC": sc,
+                # ── New degree-based (11) ──
+                "BM": bm, "TM": tm, "GH": gh, "GBM": gbm, "GTM": gtm,
+                "HG": hg, "BMG": bmg, "BMH": bmh, "TMG": tmg, "TMH": tmh,
+                "SDD": sdd,
+                # ── Reverse-degree (9) ──
+                "RM1": rm1, "RM2": rm2, "RABC": rabc, "RR": rr, "RH": rh,
+                "RF": rf, "RGA": rga, "RBM": rbm, "RSDD": rsdd,
+                # ── Degree-sum edge (5) ──
                 "DS1": ds1, "DS2": ds2, "DSR": dsr, "DSH": dsh, "DSGA": dsga,
+                # ── Distance-based (5) ──
                 "W": w, "J": j_bal, "Z": z_hosoya, "Sz": sz, "GE": ge,
-                "W_v": w_v, "W_e": w_e, "W_ve": w_ve, "Sz_v": sz_v, "Sz_e": sz_e, "Sz_ve": sz_ve,
+                # ── Advanced cut-graph (11) ──
+                "W_v": w_v, "W_e": w_e, "W_ve": w_ve,
+                "Sz_v": sz_v, "Sz_e": sz_e, "Sz_ve": sz_ve,
                 "Mo_v": mo_v, "Mo_e": mo_e,
-                "PI": pi_val, "Schultz": schultz, "Gutman": gutman
+                "PI": pi_val, "Schultz": schultz, "Gutman": gutman,
+
+                # ══ NEW INDICES (85) ══════════════════════════
+
+                # ── New normal degree-based (11) ──
+                "A":      a_idx,
+                "G":      g_idx,
+                "HA":     ha_idx,
+                "SO":     so_idx,
+                "ABC_SC": abc_sc_idx,
+                "ISI":    isi_idx,
+                "sigma":  sigma_idx,
+                "HBM":    hbm_idx,
+                "HTM":    htm_idx,
+                "BMA":    bma_idx,
+                "TMA":    tma_idx,
+
+                # ── SS_ neighbour-degree-sum (30) ──
+                "SS_M1":    ss_m1,   "SS_M2":    ss_m2,
+                "SS_BM":    ss_bm,   "SS_TM":    ss_tm,
+                "SS_SC":    ss_sc,   "SS_GH":    ss_gh,
+                "SS_R":     ss_r,    "SS_GBM":   ss_gbm,
+                "SS_A":     ss_a,    "SS_G":     ss_g,
+                "SS_GA":    ss_ga,   "SS_H":     ss_h,
+                "SS_HG":    ss_hg,   "SS_HM":    ss_hm,
+                "SS_HBM":   ss_hbm,  "SS_HTM":   ss_htm,
+                "SS_SDD":   ss_sdd,  "SS_HA":    ss_ha,
+                "SS_SO":    ss_so,   "SS_BMG":   ss_bmg,
+                "SS_ABC":   ss_abc,  "SS_BMH":   ss_bmh,
+                "SS_AZ":    ss_az,   "SS_BMA":   ss_bma,
+                "SS_ISI":   ss_isi,  "SS_TMH":   ss_tmh,
+                "SS_ABS":   ss_abs,  "SS_TMA":   ss_tma,
+                "SS_sigma": ss_sigma,"SS_TMG":   ss_tmg,
+
+                # ── Rk reverse of new 11 (k=1..4) (44) ──
+                **rk_all,
             }
 
-            for k in all_keys:
-                results[k].append(_safe_float(val_map.get(k, float('nan'))))
+            for key in all_keys:
+                results[key].append(_safe_float(val_map.get(key, float('nan'))))
 
         except Exception:
-            for k in all_keys:
-                results[k].append(float('nan'))
+            for key in all_keys:
+                results[key].append(float('nan'))
 
     expected_len = len(df)
-    for k, vals_list in results.items():
-        if len(vals_list) < expected_len:
-            vals_list = vals_list + [float('nan')] * (expected_len - len(vals_list))
-        elif len(vals_list) > expected_len:
-            vals_list = vals_list[:expected_len]
-        df[k] = vals_list
+    for key, v_list in results.items():
+        if len(v_list) < expected_len:
+            v_list = v_list + [float('nan')] * (expected_len - len(v_list))
+        elif len(v_list) > expected_len:
+            v_list = v_list[:expected_len]
+        df[key] = v_list
 
-    # FIXED: Fill NaN with 0 instead of dropping entire drugs.
-    # Dropping was the root cause of "only 1 drug" — any molecule with a single
-    # NaN index (e.g. disconnected fragments, edge cases) was discarded entirely.
-    for k in all_keys:
-        df[k] = df[k].fillna(0.0)
+    # Fill NaN with 0 instead of dropping rows
+    for key in all_keys:
+        df[key] = df[key].fillna(0.0)
 
-    # Only drop rows where ALL topological indices are 0/NaN (completely failed molecules)
+    # Drop only rows where ALL topological indices are zero (completely failed molecules)
     df = df[df[all_keys].any(axis=1)].reset_index(drop=True)
 
-    print(f"    [✓] 50 topological indices computed for {len(df)} molecules.")
+    print(f"    [✓] 135 topological indices computed for {len(df)} molecules.")
     return df
 
 
@@ -468,10 +653,7 @@ def compute_topological_indices(df: pd.DataFrame) -> pd.DataFrame:
 def run_correlation(df: pd.DataFrame) -> dict:
     print("[*] Computing correlation analysis...")
 
-    valid_topo = [
-        t for t in TOPO_INDICES
-        if t in df.columns
-    ]
+    valid_topo = [t for t in TOPO_INDICES if t in df.columns]
     available_targets = [
         t for t in ML_TARGETS
         if t in df.columns
@@ -643,7 +825,6 @@ def run_ml_qspr(df: pd.DataFrame):
             for name, (model, param_grid) in MODELS_AND_GRIDS.items():
                 try:
                     pipe = Pipeline([("scaler", StandardScaler()), ("model", model)])
-
                     if param_grid:
                         gs = GridSearchCV(
                             pipe, param_grid,
@@ -719,8 +900,8 @@ def compute_shap(df: pd.DataFrame, best_models: dict) -> dict:
             )
             if len(X_sub) == 0:
                 continue
-            X_arr     = X_sub[valid_topo].values.astype(np.float64)
-            X_scaled  = scaler.transform(X_arr)
+            X_arr    = X_sub[valid_topo].values.astype(np.float64)
+            X_scaled = scaler.transform(X_arr)
 
             if isinstance(inner, (RandomForestRegressor, XGBRegressor,
                                    ExtraTreesRegressor, GradientBoostingRegressor)):
@@ -756,14 +937,14 @@ def apply_drug_filters(df: pd.DataFrame) -> pd.DataFrame:
         return nums >= threshold
 
     df["Lipinski_Pass"] = (
-        _safe_cmp(df.get("MolWt",   pd.Series([999]*len(df))), 500) &
-        _safe_cmp(df.get("LogP",    pd.Series([999]*len(df))), 5)   &
-        _safe_cmp(df.get("HBD",     pd.Series([999]*len(df))), 5)   &
-        _safe_cmp(df.get("HBA",     pd.Series([999]*len(df))), 10)
+        _safe_cmp(df.get("MolWt",    pd.Series([999]*len(df))), 500) &
+        _safe_cmp(df.get("LogP",     pd.Series([999]*len(df))), 5)   &
+        _safe_cmp(df.get("HBD",      pd.Series([999]*len(df))), 5)   &
+        _safe_cmp(df.get("HBA",      pd.Series([999]*len(df))), 10)
     )
 
     df["Veber_Pass"] = (
-        _safe_cmp(df.get("RotBonds", pd.Series([999]*len(df))), 10)  &
+        _safe_cmp(df.get("RotBonds", pd.Series([999]*len(df))), 10) &
         _safe_cmp(df.get("TPSA",     pd.Series([999]*len(df))), 140)
     )
 
@@ -779,10 +960,9 @@ def apply_drug_filters(df: pd.DataFrame) -> pd.DataFrame:
             pains_flags.append(None)
     df["PAINS_Pass"] = pains_flags
 
-    lip = df["Lipinski_Pass"].sum()
-    veb = df["Veber_Pass"].sum()
-    pai = pd.Series(pains_flags).eq(True).sum()
+    lip   = df["Lipinski_Pass"].sum()
+    veb   = df["Veber_Pass"].sum()
+    pai   = pd.Series(pains_flags).eq(True).sum()
     total = len(df)
     print(f"    [✓] Lipinski: {lip}/{total} | Veber: {veb}/{total} | PAINS: {pai}/{total}")
     return df
-
