@@ -6,9 +6,9 @@
 import os
 
 # --- Pipeline ---
-MAX_DRUGS = 200          # max drugs to fetch per disease (increased from 100)
+MAX_DRUGS = 200          # max drugs to fetch per disease
 MIN_DRUGS_WARN = 10      # warn user if fewer drugs found
-MIN_DRUGS_ERROR = 5      # ERROR if fewer than this (was allowing 0)
+MIN_DRUGS_ERROR = 5      # ERROR if fewer than this
 TEST_SIZE = 0.2          # train/test split ratio
 CV_FOLDS = 5             # k-fold cross-validation folds
 RANDOM_STATE = 42
@@ -31,66 +31,103 @@ API_HOST = "0.0.0.0"
 API_PORT = int(os.environ.get("PORT", 5000))
 CORS_ORIGINS = ["*"]     # restrict this in production
 
-# --- Topological indices computed: 39 Original + 11 New = 50 Total ---
+# --- Topological indices: 50 original + 85 new = 135 total ---
+#
+#   Sources merged:
+#     degreessum_computation.py      → 30 SS_ neighbour-degree-sum variants
+#     degree_reverse_computation.py  → 11 new degree-based + 44 Rk reverse variants
+#
 TOPO_INDICES = [
-    # ── Original degree-based (9) ──────────────────────
-    "M1",   # First Zagreb index
-    "M2",   # Second Zagreb index
-    "ABC",  # Atom-bond connectivity
-    "R",    # Randic connectivity
-    "H",    # Harmonic index
-    "F",    # Forgotten topological index
-    "AZI",  # Augmented Zagreb index
-    "GA",   # Geometric-Arithmetic index
-    "SC",   # Sum-Connectivity index
-    # ── New degree-based from image (11 new) ───────────
-    "BM",   # Bi-Zagreb: sum(u+v+uv)
-    "TM",   # Tri-Zagreb: sum(u²+v²+uv)
-    "GH",   # Geometric-Harmonic: sum(sqrt(uv)(u+v)/2)
-    "GBM",  # Geometric Bi-Zagreb: sum(sqrt(uv)/(u+v+uv))
-    "GTM",  # Geometric Tri-Zagreb: sum(sqrt(uv)/(u²+v²+uv))
-    "HG",   # Harmonic-Geometric: sum(2/(sqrt(uv)(u+v)))
-    "BMG",  # Bi Zagreb-Geometric: sum((u+v+uv)/sqrt(uv))
-    "BMH",  # Bi Zagreb-Harmonic: sum((u+v+uv)(u+v)/2)
-    "TMG",  # Tri Zagreb-Geometric: sum((u²+v²+uv)/sqrt(uv))
-    "TMH",  # Tri Zagreb-Harmonic: sum((u²+v²+uv)(u+v)/2)
-    "SDD",  # Symmetric Degree Division: sum((u²+v²)/uv)
-    # ── Reverse-degree variants (use n+1-d as degree) ──
-    "RM1",  # Reverse First Zagreb
-    "RM2",  # Reverse Second Zagreb
-    "RABC", # Reverse ABC
-    "RR",   # Reverse Randic
-    "RH",   # Reverse Harmonic
-    "RF",   # Reverse Forgotten
-    "RGA",  # Reverse Geometric-Arithmetic
-    "RBM",  # Reverse Bi-Zagreb
-    "RSDD", # Reverse Symmetric Degree Division
-    # ── Degree-sum variants (use d(u)+d(v) as weight) ──
-    "DS1",  # Degree-Sum Zagreb 1: sum((u+v)²)
-    "DS2",  # Degree-Sum Zagreb 2: sum((u+v)(u+v))
-    "DSR",  # Degree-Sum Randic: sum(1/sqrt(u+v))
-    "DSH",  # Degree-Sum Harmonic: sum(2/(u+v))
-    "DSGA", # Degree-Sum GA: sum(2sqrt(uv)/(u+v))
-    # ── Original Distance-based (5) ────────────────────
-    "W",    # Wiener index (original)
+    # ════════════════════════════════════════════════════════
+    # ORIGINAL 50 INDICES
+    # ════════════════════════════════════════════════════════
+
+    # ── Original degree-based (9) ────────────────────────────
+    "M1",   # First Zagreb index:       Σ d(v)²
+    "M2",   # Second Zagreb index:      Σ d(u)·d(v)
+    "ABC",  # Atom-bond connectivity:   Σ √((d(u)+d(v)-2)/(d(u)·d(v)))
+    "R",    # Randić connectivity:      Σ 1/√(d(u)·d(v))
+    "H",    # Harmonic index:           Σ 2/(d(u)+d(v))
+    "F",    # Forgotten index:          Σ d(v)³
+    "AZI",  # Augmented Zagreb:         Σ (d(u)·d(v)/(d(u)+d(v)-2))³
+    "GA",   # Geometric-Arithmetic:     Σ 2√(d(u)·d(v))/(d(u)+d(v))
+    "SC",   # Sum-Connectivity:         Σ 1/√(d(u)+d(v))
+
+    # ── New degree-based (11) ─────────────────────────────────
+    "BM",   # Bi-Zagreb:                Σ (d(u)+d(v)+d(u)·d(v))
+    "TM",   # Tri-Zagreb:               Σ (d(u)²+d(v)²+d(u)·d(v))
+    "GH",   # Geometric-Harmonic:       Σ √(d(u)·d(v))·(d(u)+d(v))/2
+    "GBM",  # Geometric Bi-Zagreb:      Σ √(d(u)·d(v))/(d(u)+d(v)+d(u)·d(v))
+    "GTM",  # Geometric Tri-Zagreb:     Σ √(d(u)·d(v))/(d(u)²+d(v)²+d(u)·d(v))
+    "HG",   # Harmonic-Geometric:       Σ 2/(√(d(u)·d(v))·(d(u)+d(v)))
+    "BMG",  # Bi Zagreb-Geometric:      Σ (d(u)+d(v)+d(u)·d(v))/√(d(u)·d(v))
+    "BMH",  # Bi Zagreb-Harmonic:       Σ (d(u)+d(v)+d(u)·d(v))·(d(u)+d(v))/2
+    "TMG",  # Tri Zagreb-Geometric:     Σ (d(u)²+d(v)²+d(u)·d(v))/√(d(u)·d(v))
+    "TMH",  # Tri Zagreb-Harmonic:      Σ (d(u)²+d(v)²+d(u)·d(v))·(d(u)+d(v))/2
+    "SDD",  # Sym Degree Division:      Σ (d(u)²+d(v)²)/(d(u)·d(v))
+
+    # ── Reverse-degree (9) — rd(v) = n+1-d(v) ────────────────
+    "RM1",  "RM2",  "RABC", "RR",   "RH",
+    "RF",   "RGA",  "RBM",  "RSDD",
+
+    # ── Degree-sum edge variants (5) — weight = d(u)+d(v) ────
+    "DS1",  "DS2",  "DSR",  "DSH",  "DSGA",
+
+    # ── Distance-based (5) ───────────────────────────────────
+    "W",    # Wiener index
     "J",    # Balaban J index
     "Z",    # Hosoya Z index
-    "Sz",   # Szeged index (original)
-    "GE",   # Graph entropy (Shannon)
-    # ── NEW: Advanced distance-based Wiener variants (6) 
-    "W_v",     # Vertex Wiener: sum over pairs of vertices
-    "W_e",     # Edge Wiener: sum over pairs of edges
-    "W_ve",    # Vertex-edge Wiener: mixed
-    "Sz_v",    # Vertex Szeged: based on vertex partitioning
-    "Sz_e",    # Edge Szeged: based on edge partitioning
-    "Sz_ve",   # Vertex-edge Szeged: mixed
-    # ── NEW: Mostar indices (2)
-    "Mo_v",    # Vertex Mostar
-    "Mo_e",    # Edge Mostar
-    # ── NEW: Special indices (3)
-    "PI",      # Padmakar-Ivan index
-    "Schultz", # Schultz index
-    "Gutman",  # Gutman index
+    "Sz",   # Szeged index
+    "GE",   # Graph entropy
+
+    # ── Advanced cut-graph (11) ──────────────────────────────
+    "W_v",  "W_e",  "W_ve",
+    "Sz_v", "Sz_e", "Sz_ve",
+    "Mo_v", "Mo_e",
+    "PI",   "Schultz", "Gutman",
+
+    # ════════════════════════════════════════════════════════
+    # NEW — 85 ADDITIONAL INDICES FROM UPLOADED FILES
+    # ════════════════════════════════════════════════════════
+
+    # ── NEW: Additional normal degree-based (11) ─────────────
+    # Source: degree_reverse_computation_orderedIndices.py
+    "A",        # Arithmetic index:         Σ (d(u)+d(v))/2
+    "G",        # Geometric index:          Σ √(d(u)·d(v))
+    "HA",       # Harmonic-square:          Σ 4/(d(u)+d(v))²
+    "SO",       # Sombor index:             Σ √(d(u)²+d(v)²)
+    "ABC_SC",   # ABC / Sum-Conn product:   Σ √((d(u)+d(v)-2)/(d(u)·d(v))) / √(d(u)+d(v))
+    "ISI",      # Inverse Sum Indeg:        Σ d(u)·d(v)/(d(u)+d(v))
+    "sigma",    # Sigma irregularity:       Σ (d(u)-d(v))²
+    "HBM",      # Harmonic Bi-Zagreb:       Σ 2/((d(u)+d(v)+d(u)·d(v))·(d(u)+d(v)))
+    "HTM",      # Harmonic Tri-Zagreb:      Σ 2/((d(u)²+d(v)²+d(u)·d(v))·(d(u)+d(v)))
+    "BMA",      # Bi-Zagreb Arithmetic:     Σ (2/(d(u)+d(v)))·(d(u)+d(v)+d(u)·d(v))
+    "TMA",      # Tri-Zagreb Arithmetic:    Σ (2/(d(u)+d(v)))·(d(u)²+d(v)²+d(u)·d(v))
+
+    # ── NEW: Neighbour-degree-sum variants, prefix SS_ (30) ──
+    # Source: degreessum_computation.py
+    # σ(v) = Σ_{u~v} d(u)  (sum of neighbour degrees); replaces d(v) in all formulas
+    "SS_M1",   "SS_M2",   "SS_BM",   "SS_TM",   "SS_SC",
+    "SS_GH",   "SS_R",    "SS_GBM",  "SS_A",    "SS_G",
+    "SS_GA",   "SS_H",    "SS_HG",   "SS_HM",   "SS_HBM",
+    "SS_HTM",  "SS_SDD",  "SS_HA",   "SS_SO",   "SS_BMG",
+    "SS_ABC",  "SS_BMH",  "SS_AZ",   "SS_BMA",  "SS_ISI",
+    "SS_TMH",  "SS_ABS",  "SS_TMA",  "SS_sigma","SS_TMG",
+
+    # ── NEW: Rk reverse-degree variants of new 11 indices (k=1..4) (44) ──
+    # Source: degree_reverse_computation_orderedIndices.py
+    # R_k(v) = Δ - d(v) + k  when k ≤ d(v);  (Δ - d(v) + k) mod Δ  otherwise
+    "R1_A",     "R1_G",     "R1_HA",    "R1_SO",    "R1_ABC_SC",
+    "R1_ISI",   "R1_sigma", "R1_HBM",   "R1_HTM",   "R1_BMA",   "R1_TMA",
+
+    "R2_A",     "R2_G",     "R2_HA",    "R2_SO",    "R2_ABC_SC",
+    "R2_ISI",   "R2_sigma", "R2_HBM",   "R2_HTM",   "R2_BMA",   "R2_TMA",
+
+    "R3_A",     "R3_G",     "R3_HA",    "R3_SO",    "R3_ABC_SC",
+    "R3_ISI",   "R3_sigma", "R3_HBM",   "R3_HTM",   "R3_BMA",   "R3_TMA",
+
+    "R4_A",     "R4_G",     "R4_HA",    "R4_SO",    "R4_ABC_SC",
+    "R4_ISI",   "R4_sigma", "R4_HBM",   "R4_HTM",   "R4_BMA",   "R4_TMA",
 ]
 
 # --- ML targets — all predictable numerical properties ---
@@ -105,4 +142,3 @@ ML_TARGETS = [
     # Bioactivity (4) — only used if data available
     "BIO_IC50", "BIO_Ki", "BIO_EC50", "BIO_Kd",
 ]
-
