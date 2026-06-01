@@ -1,12 +1,12 @@
 services:
   - type: web
     name: moleculens
-    env: python
+    runtime: python
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn website:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.0"
-    healthCheckPath: /health
